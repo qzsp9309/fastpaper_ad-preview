@@ -4,7 +4,7 @@ import base64
 # 1. 페이지 설정
 st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
 
-# 2. CSS 스타일링 (여백 및 비율 최적화)
+# 2. CSS 스타일링 (4:5 비율 및 레이아웃 최적화)
 st.markdown("""
     <style>
     .content-grid {
@@ -73,11 +73,11 @@ st.markdown("""
 if 'selected_thumb_idx' not in st.session_state:
     st.session_state.selected_thumb_idx = 0
 
-# 3. 텍스트 클리닝 함수 (공백 및 유령 문자 제거)
+# 3. 텍스트 클리닝 함수 (불필요한 공백 제거 및 줄바꿈 보정)
 def clean_insta_text(text):
     if not text:
         return ""
-    # 양끝 쓸데없는 공백 제거 및 유령 문자 치환
+    # 앞뒤 공백 제거 및 유령 공백 문자 치환
     return text.strip().replace('\xa0', ' ').replace('\u200b', '').replace('\t', ' ')
 
 # 4. 사이드바 입력창
@@ -109,19 +109,26 @@ if thumb_files:
             f = thumb_files[i]
             f.seek(0)
             t_b64 = base64.b64encode(f.read()).decode()
+            
             st.markdown(f"""
                 <div class="thumb-selection-wrapper">
                     <div class="thumb-img-box"><img src="data:image/jpeg;base64,{t_b64}"></div>
                     <div class="thumb-text-left">{clean_insta_text(thumb_texts[i])}</div>
                 </div>
             """, unsafe_allow_html=True)
-            if st.button(f"{i+1}안 선택", key=f"btn_{i}"):
+            
+            if st.button(f"{i+1}안 선택", key=f"btn_{i}", use_container_width=True):
                 st.session_state.selected_thumb_idx = i
                 st.rerun()
     st.divider()
 
-# 6. 그리드 뷰 및 텍스트 렌더링
-st.markdown(f'<div class="insta-header"><div class="profile-circle"></div><span>fastpapermag</span></div>', unsafe_allow_html=True)
+# 6. 인스타그램 헤더 & 그리드 뷰
+st.markdown(f"""
+    <div class="insta-header">
+        <div class="profile-circle"></div>
+        <span>fastpapermag</span>
+    </div>
+""", unsafe_allow_html=True)
 
 combined_media = []
 if thumb_files:
@@ -139,21 +146,21 @@ if combined_media:
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-# 7. 본문 & 댓글 영역 (에러 해결 핵심 구간)
+# 7. 본문 & 댓글 영역 (태그 오류 방지를 위해 f-string 구조 단순화)
 final_mention = clean_insta_text(mention_text)
 final_hashtag = clean_insta_text(hashtag_text)
 
-# </div> 태그가 문자로 노출되지 않도록 구조화된 HTML 사용
+# 텍스트가 노출되지 않도록 깔끔하게 분리하여 마크다운 출력
 st.markdown(f"""
     <div style="padding: 20px 0; border-top: 1px solid #eee; font-family: sans-serif;">
-        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; margin-bottom: 20px;">
-            <b>fastpapermag</b><br>
+        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; margin-bottom: 30px;">
+            <b style="font-size: 17px;">fastpapermag</b><br>
             {final_mention}
         </div>
         
-        <div style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #f0f0f0;">
-            <p style="color: #333; font-size: 14px; margin: 0 0 8px 0; font-weight: bold;">댓글태그</p>
-            <div style="color: #00376b; font-size: 14px; white-space: pre-wrap; word-break: break-all;">
+        <div style="background-color: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #f0f0f0;">
+            <p style="color: #333; font-size: 14px; margin: 0 0 10px 0; font-weight: bold;">댓글태그</p>
+            <div style="color: #00376b; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;">
                 {final_hashtag}
             </div>
         </div>
