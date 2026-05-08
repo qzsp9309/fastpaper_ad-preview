@@ -161,7 +161,7 @@ if combined_media:
 st.markdown(f"""
     <div class="insta-text-container">
         <div class="insta-text-box">
-            <span style="font-weight:bold; margin-right:5px; vertical-align: top;">fastpapermag</span>{clean_insta_text(mention_text)}
+            {clean_insta_text(mention_text)}
         </div>
     </div>
 """, unsafe_allow_html=True)
