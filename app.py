@@ -99,7 +99,7 @@ with st.sidebar:
     thumb_files = st.file_uploader("썸네일 이미지 (최대 3개)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
     thumb_texts = [st.text_area(f"{i+1}안 썸네일 문구", key=f"t_txt_{i}", height=100) for i in range(3)]
     content_files = st.file_uploader("본문 소재", type=['png', 'jpg', 'jpeg', 'mp4', 'mov'], accept_multiple_files=True)
-    mention_text = st.text_area("본문 멘션", height=200)
+    mention_text = st.text_area("본문 멘션", height=400)
     hashtag_text = st.text_area("댓글 해시태그", height=100)
 
 # 5. 썸네일 선택 영역
@@ -142,8 +142,8 @@ if combined_media:
 st.markdown(f"""
     <div style="border-top: 1px solid #eee; padding-top: 20px;">
         <div class="insta-text-box">
-            <b>fastpapermag</b><br>
-            {clean_insta_text(mention_text)}
+        <b>fastpapermag</b><br>
+        {clean_insta_text(mention_text)}
         </div>
     </div>
 """, unsafe_allow_html=True)
