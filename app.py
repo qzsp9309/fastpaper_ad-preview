@@ -138,12 +138,11 @@ if combined_media:
         grid_html += f'<div class="grid-item"><img src="data:{mime};base64,{b64}"></div>'
     st.markdown(grid_html + '</div>', unsafe_allow_html=True)
 
-# 7. 본문 멘션 섹션 (독립 실행)
+# 7. 본문 멘션 섹션 (계정명과 본문 사이 공백 최적화)
 st.markdown(f"""
     <div style="border-top: 1px solid #eee; padding-top: 20px;">
         <div class="insta-text-box">
-        <b>fastpapermag</b><br>
-        {clean_insta_text(mention_text)}
+            <span style="font-weight:bold; margin-right:5px;">fastpapermag</span>{clean_insta_text(mention_text)}
         </div>
     </div>
 """, unsafe_allow_html=True)
