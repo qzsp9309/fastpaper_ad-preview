@@ -161,7 +161,7 @@ if combined_media:
 st.markdown(f"""
     <div class="insta-text-container">
         <div class="insta-text-box">
-            {clean_insta_text(mention_text)}
+            </br> {clean_insta_text(mention_text)}
         </div>
     </div>
 """, unsafe_allow_html=True)
