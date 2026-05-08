@@ -4,10 +4,9 @@ import base64
 # 1. 페이지 설정
 st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
 
-# 2. CSS 스타일링 (4:5 비율 및 레이아웃 최적화)
+# 2. CSS 스타일링 (여백 및 비율 최적화)
 st.markdown("""
     <style>
-    /* 인스타그램 4:5 비율 그리드 설정 */
     .content-grid {
         display: flex;
         flex-wrap: wrap;
@@ -30,10 +29,8 @@ st.markdown("""
         height: 100%;
         object-fit: cover;
     }
-
-    /* 썸네일 선택 영역 (500px 높이 & 4:5 가로폭 고정) */
     .thumb-selection-wrapper {
-        width: 400px; /* 500px 높이 기준 4:5 비율 너비 */
+        width: 400px;
         margin-bottom: 20px;
     }
     .thumb-img-box {
@@ -52,12 +49,11 @@ st.markdown("""
         text-align: left;
         font-size: 14px;
         color: #333;
-        line-height: 1.5;
+        line-height: 1.6;
         margin: 10px 0;
         white-space: pre-wrap;
+        word-break: break-all;
     }
-
-    /* 인스타그램 헤더 스타일 */
     .insta-header {
         font-weight: bold;
         font-size: 18px;
@@ -77,16 +73,22 @@ st.markdown("""
 if 'selected_thumb_idx' not in st.session_state:
     st.session_state.selected_thumb_idx = 0
 
-# 3. 사이드바 입력창
+# 3. 텍스트 클리닝 함수 (공백 및 유령 문자 제거)
+def clean_insta_text(text):
+    if not text:
+        return ""
+    # 양끝 쓸데없는 공백 제거 및 유령 문자 치환
+    return text.strip().replace('\xa0', ' ').replace('\u200b', '').replace('\t', ' ')
+
+# 4. 사이드바 입력창
 with st.sidebar:
     st.title("📂 Editor")
-    
     st.subheader("1) 썸네일 설정")
     thumb_files = st.file_uploader("썸네일 이미지 (최대 3개)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
     
     thumb_texts = []
     for i in range(3):
-        txt = st.text_area(f"{i+1}안 썸네일 문구", key=f"thumb_txt_{i}", height=80)
+        txt = st.text_area(f"{i+1}안 썸네일 문구", key=f"thumb_txt_{i}", height=100)
         thumb_texts.append(txt)
 
     st.subheader("2) 본문 소재")
@@ -95,44 +97,31 @@ with st.sidebar:
         content_files = sorted(content_files, key=lambda x: x.name)
 
     st.subheader("3) 텍스트 입력")
-    mention_text = st.text_area("본문 멘션", height=150)
-    hashtag_text = st.text_area("댓글 해시태그", height=80)
+    mention_text = st.text_area("본문 멘션", height=200)
+    hashtag_text = st.text_area("댓글 해시태그", height=100)
 
-# 4. 메인 미리보기 영역
+# 5. 메인 미리보기 영역
 if thumb_files:
     st.subheader("🎯 썸네일 안 선택")
     cols = st.columns(len(thumb_files))
-    
     for i in range(len(thumb_files)):
         with cols[i]:
             f = thumb_files[i]
             f.seek(0)
-            t_data = f.read()
-            t_b64 = base64.b64encode(t_data).decode()
-            
-            # 썸네일 이미지 박스 + 문구를 포함한 래퍼 (폭 400px 고정)
+            t_b64 = base64.b64encode(f.read()).decode()
             st.markdown(f"""
                 <div class="thumb-selection-wrapper">
-                    <div class="thumb-img-box">
-                        <img src="data:image/jpeg;base64,{t_b64}">
-                    </div>
-                    <div class="thumb-text-left">{thumb_texts[i]}</div>
+                    <div class="thumb-img-box"><img src="data:image/jpeg;base64,{t_b64}"></div>
+                    <div class="thumb-text-left">{clean_insta_text(thumb_texts[i])}</div>
                 </div>
             """, unsafe_allow_html=True)
-            
-            # 버튼도 이미지 폭(400px)에 맞춰 정렬됨
-            if st.button(f"{i+1}안 선택", key=f"btn_{i}", use_container_width=False):
+            if st.button(f"{i+1}안 선택", key=f"btn_{i}"):
                 st.session_state.selected_thumb_idx = i
                 st.rerun()
     st.divider()
 
-# 5. 그리드 뷰 (4:5 비율)
-st.markdown(f"""
-    <div class="insta-header">
-        <div class="profile-circle"></div>
-        <span>fastpapermag</span>
-    </div>
-""", unsafe_allow_html=True)
+# 6. 그리드 뷰 및 텍스트 렌더링
+st.markdown(f'<div class="insta-header"><div class="profile-circle"></div><span>fastpapermag</span></div>', unsafe_allow_html=True)
 
 combined_media = []
 if thumb_files:
@@ -144,44 +133,28 @@ if combined_media:
     grid_html = '<div class="content-grid">'
     for i, f in enumerate(combined_media):
         f.seek(0)
-        data = f.read()
-        b64 = base64.b64encode(data).decode()
-        
-        # 영상 파일도 img 태그를 사용하여 미리보기 이미지로만 노출 (부하 감소)
-        # 브라우저가 영상 데이터의 첫 프레임을 이미지처럼 처리하도록 함
+        b64 = base64.b64encode(f.read()).decode()
         mime = "video/mp4" if f.name.endswith(('mp4', 'mov')) else "image/jpeg"
-        
-        # 영상인 경우 캡션에 비디오 아이콘 등을 띄울 수 있으나, 요청대로 이미지형태로만 노출
-        tag = f'<img src="data:{mime};base64,{b64}">'
-        
-        grid_html += f'<div class="grid-item">{tag}</div>'
-    
+        grid_html += f'<div class="grid-item"><img src="data:{mime};base64,{b64}"></div>'
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-# 6. 본문 텍스트 (강력한 줄바꿈 보정 버전)
-def clean_text(text):
-    if not text:
-        return ""
-    # 1. 줄바꿈 방지 공백(&nbsp;) 제거
-    # 2. 제로 폭 공백(Zero-width space) 제거
-    # 3. 탭(Tab) 문자를 공백으로 치환
-    return text.replace('\xa0', ' ').replace('\u200b', '').replace('\t', ' ')
+# 7. 본문 & 댓글 영역 (에러 해결 핵심 구간)
+final_mention = clean_insta_text(mention_text)
+final_hashtag = clean_insta_text(hashtag_text)
 
-clean_mention = clean_text(mention_text)
-clean_hashtag = clean_text(hashtag_text)
-
+# </div> 태그가 문자로 노출되지 않도록 구조화된 HTML 사용
 st.markdown(f"""
-    <div style="padding: 25px 0; border-top: 1px solid #eee; font-family: sans-serif;">
-        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word;">
-            <b>fastpapermag</b><br><br>
-            {clean_mention}
+    <div style="padding: 20px 0; border-top: 1px solid #eee; font-family: sans-serif;">
+        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; margin-bottom: 20px;">
+            <b>fastpapermag</b><br>
+            {final_mention}
         </div>
         
-        <div style="margin-top: 30px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #f0f0f0;">
-            <p style="color: #333; font-size: 14px; margin: 0; font-weight: bold;">댓글태그</p>
-            <div style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word;">
-                {clean_hashtag}
+        <div style="background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #f0f0f0;">
+            <p style="color: #333; font-size: 14px; margin: 0 0 8px 0; font-weight: bold;">댓글태그</p>
+            <div style="color: #00376b; font-size: 14px; white-space: pre-wrap; word-break: break-all;">
+                {final_hashtag}
             </div>
         </div>
     </div>
