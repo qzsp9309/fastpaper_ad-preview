@@ -2,120 +2,152 @@ import streamlit as st
 import base64
 
 # 페이지 설정
-st.set_page_config(page_title="Fastpaper Instagram Preview", layout="wide")
+st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
 
-# --- 1. CSS: 가로 슬라이드 및 세련된 디자인 ---
+# --- 1. CSS & JavaScript (고해상도 캡처 및 스타일링) ---
 st.markdown("""
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script>
+    function saveCapture() {
+        const element = document.querySelector("#capture-area");
+        html2canvas(element, {
+            scale: 2, // 고해상도 설정을 위해 스케일 업
+            useCORS: true,
+            backgroundColor: "#ffffff"
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = 'fastpapermag_preview.jpg';
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
+            link.click();
+        });
+    }
+    </script>
     <style>
-    /* 인스타그램 스타일 가로 슬라이더 */
+    /* 가로 슬라이더 스타일 */
     .slide-container {
         display: flex;
         overflow-x: auto;
-        scroll-snap-type: x mandatory;
         gap: 10px;
-        padding-bottom: 15px;
-        -webkit-overflow-scrolling: touch;
+        padding: 20px;
+        background-color: #ffffff;
     }
     .slide-item {
         flex: 0 0 auto;
-        scroll-snap-align: center;
         background: #000;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 8px;
+        border: 1px solid #eee;
     }
     .slide-item img, .slide-item video {
-        max-width: 100%;
         max-height: 100%;
         object-fit: contain;
     }
-    /* 스크롤바 숨기기 */
-    .slide-container::-webkit-scrollbar { display: none; }
-    
-    /* 인쇄 모드 최적화 (PDF 저장용) */
-    @media print {
-        .no-print { display: none !important; }
-        .print-only { display: block !important; }
-        .main { background: white !important; }
+    /* 캡처를 위한 전체 영역 스타일 */
+    #capture-area {
+        background: white;
+        padding: 40px;
+        width: fit-content;
+        min-width: 1000px;
+    }
+    .insta-header {
+        font-weight: bold;
+        font-size: 18px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+    }
+    .profile-circle {
+        width: 35px; height: 35px; border-radius: 50%;
+        background: #eee; margin-right: 12px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 사이드바/좌측 세팅 ---
-with st.sidebar if 'sidebar' in locals() else st.container(): # 왼쪽 영역
-    if 'sidebar' not in locals():
-        left_col, right_col = st.columns([1, 1.5])
+# --- 2. 사이드바 (설정창) ---
+with st.sidebar:
+    st.title("🚀 Fastpapermag Editor")
     
-    with left_col:
-        st.title("⚙️ Setting")
-        
-        # 높이 조절 슬라이더
-        img_height = st.slider("미리보기 이미지 높이 설정 (px)", 300, 800, 500)
-        
-        # 1. 썸네일 업로드
-        st.subheader("1) 썸네일 후보 (3개)")
-        thumb_files = st.file_uploader("썸네일 선택", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
-        
-        # 2. 본문 소재 업로드
-        st.subheader("2) 본문 소재 (이미지/영상)")
-        content_files = st.file_uploader("본문 소재 선택", type=['png', 'jpg', 'jpeg', 'mp4', 'mov'], accept_multiple_files=True)
-        if content_files:
-            content_files = sorted(content_files, key=lambda x: x.name)
+    # 1. 썸네일 업로드
+    st.subheader("1) 썸네일 후보")
+    thumb_files = st.file_uploader("썸네일 이미지 선택", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    
+    # 2. 본문 소재 업로드
+    st.subheader("2) 본문 소재")
+    content_files = st.file_uploader("이미지/영상 선택", type=['png', 'jpg', 'jpeg', 'mp4', 'mov'], accept_multiple_files=True)
+    if content_files:
+        content_files = sorted(content_files, key=lambda x: x.name)
 
-        # 3. 멘션 및 댓글
-        mention_text = st.text_area("인스타그램 멘션", height=200)
-        hashtag_text = st.text_area("댓글 해시태그", height=80)
-        
-        st.divider()
-        # PDF 저장 버튼 (브라우저 인쇄창 호출)
-        if st.button("📄 PDF 저장/인쇄 모드 실행"):
-            st.write("콘트롤(Command) + P를 눌러 PDF로 저장하세요.")
+    # 3. 멘션 및 댓글
+    st.subheader("3) 텍스트 입력")
+    mention_text = st.text_area("본문 멘션", height=150)
+    hashtag_text = st.text_area("댓글 태그", height=80)
+    
+    st.divider()
+    # 캡처 버튼
+    if st.button("📸 고해상도 JPG 다운로드 (2,000px급)"):
+        st.components.v1.html("<script>saveCapture();</script>")
 
-# --- 3. 우측 미리보기 영역 ---
+# --- 3. 메인 미리보기 영역 ---
+left_col, right_col = st.columns([0.1, 0.9]) # 여백 조절
+
 with right_col:
-    st.title("📱 Instagram Preview")
+    # 썸네일 선택 라디오 (미리보기 위에 위치)
+    selected_thumb = None
+    if thumb_files:
+        thumb_names = [f.name for f in thumb_files]
+        choice = st.radio("미리보기에 적용할 썸네일 선택", thumb_names, horizontal=True)
+        selected_thumb = next(f for f in thumb_files if f.name == choice)
+
+    # 🖼️ 캡처 대상 영역 시작
+    st.markdown('<div id="capture-area">', unsafe_allow_html=True)
     
-    # 인스타그램 목업 박스
-    with st.container():
-        # 1) 썸네일 셀렉터
-        if thumb_files:
-            thumb_names = [f.name for f in thumb_files]
-            selected_thumb_name = st.radio("시뮬레이션할 썸네일 선택", thumb_names, horizontal=True, key="thumb_radio")
-            selected_thumb = next(f for f in thumb_files if f.name == selected_thumb_name)
-            
-            st.markdown("**[현재 적용된 썸네일]**")
-            st.image(selected_thumb, width=200) # 작게 표시
-            st.divider()
+    # 계정 정보 (fastpapermag)
+    st.markdown(f"""
+        <div class="insta-header">
+            <div class="profile-circle"></div>
+            <span>fastpapermag</span>
+        </div>
+    """, unsafe_allow_html=True)
 
-        # 2) 가로 슬라이더 (메인 소재)
-        if content_files:
-            st.markdown(f"**슬라이드 미리보기 (총 {len(content_files)}장) - 좌우로 밀어서 확인**")
-            
-            # HTML/CSS 기반 가로 슬라이더 생성
-            slide_html = f'<div class="slide-container">'
-            for f in content_files:
-                # 파일을 base64로 변환하여 HTML에 삽입
-                data = f.read()
-                b64 = base64.b64encode(data).decode()
-                mime = "video/mp4" if f.name.endswith(('mp4', 'mov')) else "image/jpeg"
-                
-                if "video" in mime:
-                    tag = f'<video controls autoplay muted loop><source src="data:{mime};base64,{b64}"></video>'
-                else:
-                    tag = f'<img src="data:{mime};base64,{b64}">'
-                
-                slide_html += f'<div class="slide-item" style="width:{img_height}px; height:{img_height}px;">{tag}</div>'
-            slide_html += '</div>'
-            
-            st.markdown(slide_html, unsafe_allow_html=True)
-        else:
-            st.info("파일을 업로드하면 슬라이드가 생성됩니다.")
+    # 슬라이드 구성 (썸네일 + 본문)
+    combined_media = []
+    if selected_thumb:
+        combined_media.append(selected_thumb)
+    if content_files:
+        combined_media.extend(content_files)
 
-        # 3) 멘션 및 댓글 영역
-        st.markdown(f"""
-            <div style="background: white; padding: 15px; border: 1px solid #eee; border-top: none;">
-                <p><b>fastpaper_official</b> {mention_text.replace('\n', '<br>')}</p>
-                <p style="color: #00376b;">{hashtag_text}</p>
+    if combined_media:
+        # 가로 높이 500px 고정 슬라이더
+        slide_html = '<div class="slide-container">'
+        for i, f in enumerate(combined_media):
+            f.seek(0) # 파일 포인터 초기화
+            data = f.read()
+            b64 = base64.b64encode(data).decode()
+            mime = "video/mp4" if f.name.endswith(('mp4', 'mov')) else "image/jpeg"
+            
+            # 첫 번째 이미지(선택된 썸네일)에만 표시 추가
+            label = '<div style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 6px; font-size:12px;">Thumbnail</div>' if i == 0 and selected_thumb else ""
+            
+            if "video" in mime:
+                tag = f'<video muted><source src="data:{mime};base64,{b64}"></video>'
+            else:
+                tag = f'<img src="data:{mime};base64,{b64}">'
+            
+            slide_html += f'<div class="slide-item" style="height:500px; position:relative;">{label}{tag}</div>'
+        slide_html += '</div>'
+        st.markdown(slide_html, unsafe_allow_html=True)
+    else:
+        st.info("왼쪽에서 파일을 업로드해 주세요.")
+
+    # 하단 텍스트 영역
+    st.markdown(f"""
+        <div style="padding: 20px 0; border-top: 1px solid #eee;">
+            <p style="font-size: 16px;"><b>fastpapermag</b> {mention_text.replace('\\n', '<br>')}</p>
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px dashed #ddd;">
+                <p style="color: #666; font-size: 14px;"><b>댓글태그</b><br>{hashtag_text.replace('\\n', '<br>')}</p>
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True) # 캡처 영역 끝
