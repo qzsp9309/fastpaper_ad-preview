@@ -10,9 +10,8 @@ st.markdown("""
     <script>
     function saveCapture() {
         const element = document.querySelector("#capture-area");
-        // 가로로 긴 영역을 모두 담기 위해 옵션 조정
         html2canvas(element, {
-            scale: 2, // 고해상도 (2,000px급)
+            scale: 2,
             useCORS: true,
             backgroundColor: "#ffffff",
             scrollX: 0,
@@ -28,7 +27,7 @@ st.markdown("""
     }
     </script>
     <style>
-    /* 가로 슬라이더 스타일 (메인) */
+    /* 가로 슬라이더 스타일 (메인 500px) */
     .slide-container {
         display: flex;
         overflow-x: auto;
@@ -48,14 +47,14 @@ st.markdown("""
     }
     .slide-item img, .slide-item video {
         max-height: 100%;
-        object-fit: contain;
+        max-width: 100%;
+        object-fit: contain; /* 원본 비율 유지하며 다 보여주기 */
     }
     
-    /* 캡처 영역 설정 */
     #capture-area {
         background: white;
         padding: 40px;
-        width: fit-content; /* 내용물에 맞춰 가로로 늘어남 */
+        width: fit-content;
         min-width: 1100px;
     }
     .insta-header {
@@ -74,11 +73,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 세션 상태 초기화 (선택된 썸네일 인덱스 저장)
 if 'selected_thumb_idx' not in st.session_state:
     st.session_state.selected_thumb_idx = 0
 
-# --- 2. 사이드바 (데이터 입력) ---
+# --- 2. 사이드바 ---
 with st.sidebar:
     st.title("📂 Fastpapermag Editor")
     st.subheader("1) 이미지/영상 업로드")
@@ -89,8 +87,8 @@ with st.sidebar:
         content_files = sorted(content_files, key=lambda x: x.name)
 
     st.subheader("2) 텍스트 입력")
-    mention_text = st.text_area("본문 멘션", height=150, placeholder="내용을 입력하세요...")
-    hashtag_text = st.text_area("댓글 해시태그", height=80, placeholder="#태그 #입력")
+    mention_text = st.text_area("본문 멘션", height=150)
+    hashtag_text = st.text_area("댓글 해시태그", height=80)
     
     st.divider()
     if st.button("📸 고해상도 JPG 다운로드"):
@@ -98,7 +96,7 @@ with st.sidebar:
 
 # --- 3. 메인 미리보기 영역 ---
 
-# 3-1. 상단 썸네일 셀렉터 (300px 높이 고정)
+# 3-1. 상단 썸네일 셀렉터 (300px 높이 내에서 전체 보여주기)
 if thumb_files:
     st.subheader("🎯 썸네일 안 선택")
     cols = st.columns(len(thumb_files))
@@ -108,10 +106,10 @@ if thumb_files:
             t_data = f.read()
             t_b64 = base64.b64encode(t_data).decode()
             
-            # HTML/CSS로 300px 높이 고정 이미지 출력 (st.image 오류 해결)
+            # object-fit: contain을 사용하여 이미지가 잘리지 않고 다 보이게 수정
             st.markdown(f"""
-                <div style="height:300px; width:100%; overflow:hidden; border-radius:10px; border:1px solid #eee; margin-bottom:10px; background:#f0f0f0;">
-                    <img src="data:image/jpeg;base64,{t_b64}" style="width:100%; height:100%; object-fit:cover;">
+                <div style="height:300px; width:100%; border-radius:10px; border:1px solid #eee; margin-bottom:10px; background:#f9f9f9; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                    <img src="data:image/jpeg;base64,{t_b64}" style="max-width:100%; max-height:100%; object-fit:contain;">
                 </div>
             """, unsafe_allow_html=True)
             
@@ -123,7 +121,6 @@ if thumb_files:
 # 3-2. 메인 미리보기 (캡처 영역)
 st.markdown('<div id="capture-area">', unsafe_allow_html=True)
 
-# 계정 헤더 (fastpapermag)
 st.markdown(f"""
     <div class="insta-header">
         <div class="profile-circle"></div>
@@ -131,13 +128,10 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 미디어 병합 (선택된 썸네일 + 본문)
 combined_media = []
 if thumb_files:
-    # 선택된 썸네일 추가
     target_thumb = thumb_files[st.session_state.selected_thumb_idx]
     combined_media.append(target_thumb)
-
 if content_files:
     combined_media.extend(content_files)
 
@@ -149,7 +143,6 @@ if combined_media:
         b64 = base64.b64encode(data).decode()
         mime = "video/mp4" if f.name.endswith(('mp4', 'mov')) else "image/jpeg"
         
-        # 첫 번째 칸(썸네일)에만 라벨 표시
         label = '<div style="position:absolute; top:15px; left:15px; background:#FF4B4B; color:white; padding:4px 10px; font-size:12px; font-weight:bold; border-radius:4px; z-index:10;">SELECTED THUMBNAIL</div>' if i == 0 and thumb_files else ""
         
         if "video" in mime:
@@ -157,14 +150,12 @@ if combined_media:
         else:
             tag = f'<img src="data:{mime};base64,{b64}">'
         
-        # 높이 500px 고정 슬라이더
         slide_html += f'<div class="slide-item" style="height:500px; position:relative;">{label}{tag}</div>'
     slide_html += '</div>'
     st.markdown(slide_html, unsafe_allow_html=True)
 else:
-    st.info("사이드바에서 파일을 업로드해 주세요.")
+    st.info("파일을 업로드해 주세요.")
 
-# 텍스트 영역 (멘션 & 댓글태그)
 st.markdown(f"""
     <div style="padding: 25px 0; border-top: 1px solid #eee; font-family: sans-serif;">
         <p style="font-size: 16px; line-height: 1.6;"><b>fastpapermag</b> {mention_text.replace('\\n', '<br>')}</p>
@@ -175,4 +166,4 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True) # capture-area 끝
+st.markdown('</div>', unsafe_allow_html=True)
