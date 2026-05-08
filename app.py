@@ -4,25 +4,26 @@ import base64
 # 페이지 설정
 st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
 
-# --- 1. CSS (스타일링 최적화) ---
+# --- 1. CSS (그리드 및 스타일 최적화) ---
 st.markdown("""
     <style>
     /* 1. 그리드 레이아웃 (한 줄에 5개) */
     .content-grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 10px; /* 여백 최소화 */
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px; 
         background-color: #ffffff;
         padding: 10px 0;
     }
     .grid-item {
-        width: 100%;
+        width: calc(20% - 10px); /* 5열 배치 */
         background: #000;
         display: flex;
         align-items: center;
         justify-content: center;
         border: 1px solid #eee;
         overflow: hidden;
+        position: relative;
     }
     .grid-item img, .grid-item video {
         width: 100%;
@@ -30,7 +31,7 @@ st.markdown("""
         object-fit: contain;
     }
     
-    /* 2. 썸네일 선택 영역 (여백 제거) */
+    /* 2. 썸네일 선택 영역 */
     .thumb-image-container {
         width: 100%;
         height: 300px;
@@ -39,6 +40,8 @@ st.markdown("""
         justify-content: center;
         background: #f9f9f9;
         margin-bottom: 5px;
+        border-radius: 8px;
+        overflow: hidden;
     }
     .thumb-image-container img {
         max-width: 100%;
@@ -46,7 +49,7 @@ st.markdown("""
         object-fit: contain;
     }
 
-    /* 3. 인스타그램 헤더 및 텍스트 스타일 */
+    /* 3. 인스타그램 텍스트 스타일 */
     .insta-header {
         font-weight: bold;
         font-size: 18px;
@@ -65,7 +68,7 @@ st.markdown("""
         color: #555;
         margin-top: 5px;
         text-align: center;
-        min-height: 20px;
+        font-weight: 500;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -80,7 +83,7 @@ with st.sidebar:
     st.subheader("1) 썸네일 설정")
     thumb_files = st.file_uploader("썸네일 이미지 (최대 3개)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
     
-    # 썸네일 문구 입력창 (최대 3개)
+    # 썸네일 문구 입력창
     thumb_texts = []
     for i in range(3):
         txt = st.text_input(f"{i+1}안 썸네일 문구", key=f"thumb_txt_{i}")
@@ -110,25 +113,21 @@ if thumb_files:
             t_data = f.read()
             t_b64 = base64.b64encode(t_data).decode()
             
-            # 썸네일 이미지 노출 (여백 최소화)
             st.markdown(f"""
                 <div class="thumb-image-container">
                     <img src="data:image/jpeg;base64,{t_b64}">
                 </div>
             """, unsafe_allow_html=True)
             
-            # 버튼 및 문구 노출
             if st.button(f"{i+1}안 선택", key=f"btn_{i}", use_container_width=True):
                 st.session_state.selected_thumb_idx = i
                 st.rerun()
             
-            # 썸네일 문구 노출 (내용이 있을 때만)
             if i < len(thumb_texts) and thumb_texts[i]:
                 st.markdown(f'<div class="thumb-caption">{thumb_texts[i]}</div>', unsafe_allow_html=True)
     st.divider()
 
 # 3-2. 그리드 미리보기 영역
-st.container()
 st.markdown(f"""
     <div class="insta-header">
         <div class="profile-circle"></div>
@@ -144,24 +143,24 @@ if content_files:
     combined_media.extend(content_files)
 
 if combined_media:
-    # 한 줄에 5개씩 배치되는 그리드 시작
-    st.markdown('<div class="content-grid">', unsafe_allow_html=True)
-    
-    # 5개씩 끊어서 행 생성 (Streamlit의 특성상 HTML 스트링으로 한꺼번에 구성)
-    grid_html = ""
+    # 한 줄에 5개씩 배치되는 그리드
+    grid_html = '<div class="content-grid">'
     for i, f in enumerate(combined_media):
         f.seek(0)
         data = f.read()
-        b64 = base64.base64encode(data).decode()
+        # 오류 수정 부분: base64.base64encode -> base64.b64encode
+        b64 = base64.b64encode(data).decode()
         mime = "video/mp4" if f.name.endswith(('mp4', 'mov')) else "image/jpeg"
+        
+        # 첫 번째 소재(썸네일)에만 라벨링
+        label = '<div style="position:absolute; top:10px; left:10px; background:rgba(255,75,75,0.8); color:white; padding:2px 6px; font-size:10px; font-weight:bold; z-index:10;">THUMB</div>' if i == 0 and thumb_files else ""
         
         if "video" in mime:
             tag = f'<video muted loop autoplay><source src="data:{mime};base64,{b64}"></video>'
         else:
             tag = f'<img src="data:{mime};base64,{b64}">'
         
-        # 높이는 500px 유지하되 너비는 그리드에 맞춤
-        grid_html += f'<div class="grid-item" style="height:500px;">{tag}</div>'
+        grid_html += f'<div class="grid-item" style="height:500px;">{label}{tag}</div>'
     
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
@@ -171,8 +170,8 @@ else:
 # 텍스트 영역
 st.markdown(f"""
     <div style="padding: 25px 0; border-top: 1px solid #eee; font-family: sans-serif;">
-        <p style="font-size: 16px; line-height: 1.6;"><b>fastpapermag</b> {mention_text.replace('\\n', '<br>')}</p>
-        <div style="margin-top: 30px; padding: 20px; background: #fafafa; border-radius: 8px;">
+        <p style="font-size: 16px; line-height: 1.6;"><b>fastpapermag</b><br>{mention_text.replace('\\n', '<br>')}</p>
+        <div style="margin-top: 30px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #f0f0f0;">
             <p style="color: #333; font-size: 14px; margin: 0; font-weight: bold;">댓글태그</p>
             <p style="color: #00376b; font-size: 14px; margin-top: 8px;">{hashtag_text.replace('\\n', '<br>')}</p>
         </div>
