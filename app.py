@@ -159,13 +159,30 @@ if combined_media:
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-# 6. 본문 텍스트
+# 6. 본문 텍스트 (강력한 줄바꿈 보정 버전)
+def clean_text(text):
+    if not text:
+        return ""
+    # 1. 줄바꿈 방지 공백(&nbsp;) 제거
+    # 2. 제로 폭 공백(Zero-width space) 제거
+    # 3. 탭(Tab) 문자를 공백으로 치환
+    return text.replace('\xa0', ' ').replace('\u200b', '').replace('\t', ' ')
+
+clean_mention = clean_text(mention_text)
+clean_hashtag = clean_text(hashtag_text)
+
 st.markdown(f"""
     <div style="padding: 25px 0; border-top: 1px solid #eee; font-family: sans-serif;">
-        <p style="font-size: 16px; line-height: 1.6; white-space: pre-wrap;"><b>fastpapermag</b><br>{mention_text}</p>
+        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word;">
+            <b>fastpapermag</b><br><br>
+            {clean_mention}
+        </div>
+        
         <div style="margin-top: 30px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #f0f0f0;">
             <p style="color: #333; font-size: 14px; margin: 0; font-weight: bold;">댓글태그</p>
-            <p style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap;">{hashtag_text}</p>
+            <div style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word;">
+                {clean_hashtag}
+            </div>
         </div>
     </div>
 """, unsafe_allow_html=True)
