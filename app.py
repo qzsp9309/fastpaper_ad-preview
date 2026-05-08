@@ -4,7 +4,7 @@ import base64
 # 1. 페이지 설정
 st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
 
-# 2. CSS 스타일링 (4:5 비율, 500px 높이, 줄바꿈 최적화)
+# 2. CSS 스타일링 (4:5 비율 및 레이아웃 최적화)
 st.markdown("""
     <style>
     /* 인스타그램 4:5 비율 그리드 설정 */
@@ -52,10 +52,9 @@ st.markdown("""
         text-align: left;
         font-size: 14px;
         color: #333;
-        line-height: 1.6;
+        line-height: 1.5;
         margin: 10px 0;
-        white-space: pre-wrap; /* 줄바꿈 유지 */
-        word-break: break-all;
+        white-space: pre-wrap;
     }
 
     /* 인스타그램 헤더 스타일 */
@@ -87,8 +86,7 @@ with st.sidebar:
     
     thumb_texts = []
     for i in range(3):
-        # 썸네일 문구 입력창
-        txt = st.text_area(f"{i+1}안 썸네일 문구", key=f"thumb_txt_{i}", height=100)
+        txt = st.text_area(f"{i+1}안 썸네일 문구", key=f"thumb_txt_{i}", height=80)
         thumb_texts.append(txt)
 
     st.subheader("2) 본문 소재")
@@ -97,8 +95,8 @@ with st.sidebar:
         content_files = sorted(content_files, key=lambda x: x.name)
 
     st.subheader("3) 텍스트 입력")
-    mention_text = st.text_area("본문 멘션", height=200)
-    hashtag_text = st.text_area("댓글 해시태그", height=100)
+    mention_text = st.text_area("본문 멘션", height=150)
+    hashtag_text = st.text_area("댓글 해시태그", height=80)
 
 # 4. 메인 미리보기 영역
 if thumb_files:
@@ -112,19 +110,18 @@ if thumb_files:
             t_data = f.read()
             t_b64 = base64.b64encode(t_data).decode()
             
-            # 특수 공백 제거 로직 적용
-            clean_thumb_text = thumb_texts[i].replace('\xa0', ' ').replace('\u200b', '')
-            
+            # 썸네일 이미지 박스 + 문구를 포함한 래퍼 (폭 400px 고정)
             st.markdown(f"""
                 <div class="thumb-selection-wrapper">
                     <div class="thumb-img-box">
                         <img src="data:image/jpeg;base64,{t_b64}">
                     </div>
-                    <div class="thumb-text-left">{clean_thumb_text}</div>
+                    <div class="thumb-text-left">{thumb_texts[i]}</div>
                 </div>
             """, unsafe_allow_html=True)
             
-            if st.button(f"{i+1}안 선택", key=f"btn_{i}"):
+            # 버튼도 이미지 폭(400px)에 맞춰 정렬됨
+            if st.button(f"{i+1}안 선택", key=f"btn_{i}", use_container_width=False):
                 st.session_state.selected_thumb_idx = i
                 st.rerun()
     st.divider()
@@ -150,8 +147,11 @@ if combined_media:
         data = f.read()
         b64 = base64.b64encode(data).decode()
         
-        # 영상도 이미지로만 노출하여 성능 최적화
+        # 영상 파일도 img 태그를 사용하여 미리보기 이미지로만 노출 (부하 감소)
+        # 브라우저가 영상 데이터의 첫 프레임을 이미지처럼 처리하도록 함
         mime = "video/mp4" if f.name.endswith(('mp4', 'mov')) else "image/jpeg"
+        
+        # 영상인 경우 캡션에 비디오 아이콘 등을 띄울 수 있으나, 요청대로 이미지형태로만 노출
         tag = f'<img src="data:{mime};base64,{b64}">'
         
         grid_html += f'<div class="grid-item">{tag}</div>'
@@ -159,22 +159,13 @@ if combined_media:
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-# 6. 본문 텍스트 (줄바꿈 및 특수문자 완벽 대응)
-clean_mention = mention_text.replace('\xa0', ' ').replace('\u200b', '')
-clean_hashtag = hashtag_text.replace('\xa0', ' ').replace('\u200b', '')
-
+# 6. 본문 텍스트
 st.markdown(f"""
     <div style="padding: 25px 0; border-top: 1px solid #eee; font-family: sans-serif;">
-        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all;">
-            <b>fastpapermag</b><br><br>
-            {clean_mention}
-        </div>
-        
+        <p style="font-size: 16px; line-height: 1.6; white-space: pre-wrap;"><b>fastpapermag</b><br>{mention_text}</p>
         <div style="margin-top: 30px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #f0f0f0;">
             <p style="color: #333; font-size: 14px; margin: 0; font-weight: bold;">댓글태그</p>
-            <div style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap; word-break: break-all;">
-                {clean_hashtag}
-            </div>
+            <p style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap;">{hashtag_text}</p>
         </div>
     </div>
 """, unsafe_allow_html=True)
