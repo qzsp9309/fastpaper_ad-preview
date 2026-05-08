@@ -4,9 +4,13 @@ import base64
 # 1. 페이지 설정
 st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
 
-# 2. CSS 스타일링 (4:5 비율 및 레이아웃)
+# 2. CSS 스타일링 (공백 및 레이아웃 최적화)
 st.markdown("""
     <style>
+    /* 전체 배경색 및 기본 마진 제거 */
+    .main { background-color: #ffffff; }
+
+    /* 그리드 레이아웃 */
     .content-grid {
         display: flex;
         flex-wrap: wrap;
@@ -29,6 +33,8 @@ st.markdown("""
         height: 100%;
         object-fit: cover;
     }
+
+    /* 썸네일 선택 영역 */
     .thumb-selection-wrapper {
         width: 400px;
         margin-bottom: 20px;
@@ -54,6 +60,8 @@ st.markdown("""
         white-space: pre-wrap;
         word-break: break-all;
     }
+
+    /* 인스타그램 헤더 */
     .insta-header {
         font-weight: bold;
         font-size: 18px;
@@ -67,20 +75,30 @@ st.markdown("""
         background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); 
         margin-right: 12px;
     }
-    /* 텍스트 영역 스타일 */
+
+    /* 본문 텍스트 영역 (공백 원천 차단) */
+    .insta-text-container {
+        border-top: 1px solid #eee;
+        padding-top: 15px; /* 구분선과 글자 사이 간격 */
+        margin-top: 0px;
+    }
     .insta-text-box {
         font-family: sans-serif;
         font-size: 16px;
         line-height: 1.8;
         white-space: pre-wrap;
         word-break: break-all;
-        margin-bottom: 20px;
+        margin-top: 0px !important;
+        padding-top: 0px !important;
     }
+    
+    /* 댓글 태그 영역 */
     .hashtag-box {
         background-color: #fafafa;
         padding: 20px;
         border-radius: 8px;
         border: 1px solid #f0f0f0;
+        margin-top: 20px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -88,9 +106,10 @@ st.markdown("""
 if 'selected_thumb_idx' not in st.session_state:
     st.session_state.selected_thumb_idx = 0
 
-# 3. 텍스트 클리닝 함수
+# 3. 텍스트 클리닝 함수 (유령 공백 제거)
 def clean_insta_text(text):
     if not text: return ""
+    # 앞뒤 공백 제거 및 각종 유령 공백 치환
     return text.strip().replace('\xa0', ' ').replace('\u200b', '').replace('\t', ' ')
 
 # 4. 사이드바 입력창
@@ -138,16 +157,16 @@ if combined_media:
         grid_html += f'<div class="grid-item"><img src="data:{mime};base64,{b64}"></div>'
     st.markdown(grid_html + '</div>', unsafe_allow_html=True)
 
-# 7. 본문 멘션 섹션 (계정명과 본문 사이 공백 최적화)
+# 7. 본문 멘션 섹션 (공백 제거 최적화)
 st.markdown(f"""
-    <div style="border-top: 1px solid #eee; padding-top: 20px;">
+    <div class="insta-text-container">
         <div class="insta-text-box">
-            <span style="font-weight:bold; margin-right:5px;">fastpapermag</span>{clean_insta_text(mention_text)}
+            <span style="font-weight:bold; margin-right:5px; vertical-align: top;">fastpapermag</span>{clean_insta_text(mention_text)}
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-# 8. 댓글 해시태그 섹션 (독립 실행 - 섞일 일 없음)
+# 8. 댓글 해시태그 섹션 (독립 실행)
 if hashtag_text:
     st.markdown(f"""
         <div class="hashtag-box">
@@ -157,4 +176,3 @@ if hashtag_text:
             </div>
         </div>
     """, unsafe_allow_html=True)
-    
