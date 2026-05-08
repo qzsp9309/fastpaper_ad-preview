@@ -159,13 +159,23 @@ if combined_media:
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-# 6. 본문 텍스트
+# 6. 본문 텍스트 (줄바꿈 최적화 버전)
+# 입력된 텍스트에서 HTML 특수 공백이나 꼬인 공백을 일반 공백으로 치환하여 줄바꿈을 유도합니다.
+clean_mention = mention_text.replace('\xa0', ' ').replace('\u200b', '')
+clean_hashtag = hashtag_text.replace('\xa0', ' ').replace('\u200b', '')
+
 st.markdown(f"""
     <div style="padding: 25px 0; border-top: 1px solid #eee; font-family: sans-serif;">
-        <p style="font-size: 16px; line-height: 1.6; white-space: pre-wrap;"><b>fastpapermag</b><br>{mention_text}</p>
+        <div style="font-size: 16px; line-height: 1.8; white-space: pre-wrap; word-break: break-all;">
+            <b>fastpapermag</b><br><br>
+            {clean_mention}
+        </div>
+        
         <div style="margin-top: 30px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #f0f0f0;">
             <p style="color: #333; font-size: 14px; margin: 0; font-weight: bold;">댓글태그</p>
-            <p style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap;">{hashtag_text}</p>
+            <div style="color: #00376b; font-size: 14px; margin-top: 8px; white-space: pre-wrap; word-break: break-all;">
+                {clean_hashtag}
+            </div>
         </div>
     </div>
 """, unsafe_allow_html=True)
