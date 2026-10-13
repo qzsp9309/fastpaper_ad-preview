@@ -13,7 +13,7 @@ FONT_PATH = BASE / 'assets' / 'fastpaperSans-Bold.ttf'
 LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
 TEMPLATES = {
     '4:5': {'size': (1080, 1350), 'font_size': 72, 'title_left': 95, 'title_bottom': 1130, 'line_gap': 8, 'logo_width': 205, 'logo_bottom': 40, 'logo_top': 0, 'logo_left': 0, 'title_align': 'left', 'logo_position': 'bottom'},
-    '9:16': {'size': (1080, 1920), 'font_size': 82, 'title_left': 69, 'title_bottom': 1474, 'line_gap': 15, 'logo_width': 216, 'logo_bottom': 0, 'logo_top': 290, 'logo_left': 85, 'title_align': 'left', 'logo_position': 'top'},
+    '9:16': {'size': (1080, 1920), 'font_size': 80, 'title_left': 69, 'title_bottom': 1474, 'line_gap': 15, 'logo_width': 216, 'logo_bottom': 0, 'logo_top': 290, 'logo_left': 85, 'title_align': 'left', 'logo_position': 'top'},
     '1:1': {'size': (1080, 1080), 'font_size': 64, 'title_left': 0, 'title_bottom': 920, 'line_gap': 8, 'logo_width': 160, 'logo_bottom': 27, 'logo_top': 0, 'logo_left': 0, 'title_align': 'center', 'logo_position': 'bottom'},
 }
 
@@ -49,7 +49,7 @@ def crop_cover(im, size):
 def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=False,
                    font_size=None, title_bottom=None, title_left=None, line_gap=None,
                    logo_width=None, logo_bottom=None, gradient_strength=150,
-                   logo_top=None, logo_left=None, gradient_top=False, gradient_bottom=None):
+                   logo_top=None, logo_left=None, gradient_top=False, gradient_bottom=None, title_shadow_strength=0):
     t = TEMPLATES[ratio]
     W, H = t['size']
     font_size = t['font_size'] if font_size is None else font_size
@@ -86,6 +86,20 @@ def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=Fal
         d = ImageDraw.Draw(base)
         line_h = font_size + line_gap
         top = title_bottom - len(lines) * line_h
+        # 제목 그림자: 텍스트만 별도 레이어에 그린 뒤 블러 적용
+        if title_shadow_strength > 0:
+            shadow_layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+            shadow_draw = ImageDraw.Draw(shadow_layer)
+            for i, line in enumerate(lines):
+                if TEMPLATES[ratio]['title_align'] == 'center':
+                    pos, anchor = (W // 2 + 2, top + i * line_h + 3), 'mt'
+                else:
+                    pos, anchor = (title_left + 2, top + i * line_h + 3), 'lt'
+                shadow_draw.text(pos, line, font=font,
+                                 fill=(0, 0, 0, title_shadow_strength), anchor=anchor)
+            shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(5))
+            base = Image.alpha_composite(base, shadow_layer)
+            d = ImageDraw.Draw(base)
         for i, line in enumerate(lines):
             if TEMPLATES[ratio]['title_align'] == 'center':
                 d.text((W // 2, top + i * line_h), line, font=font, fill='white', anchor='mt')
@@ -147,6 +161,8 @@ with edit_col:
     with g1: gradient_top=st.checkbox('상단 그라데이션',value=False)
     with g2: gradient_bottom=st.checkbox('하단 그라데이션',value=True)
     gradient_strength=st.slider('그라데이션 농도',min_value=0,max_value=255,value=150,step=5,help='상단과 하단에 동일하게 적용됩니다.')
+    title_shadow_enabled=st.checkbox('제목 그림자',value=False)
+    title_shadow_strength=st.slider('제목 그림자 농도',min_value=0,max_value=255,value=120,step=5,disabled=not title_shadow_enabled) if title_shadow_enabled else 0
     # 디자인 좌표/폰트/로고 크기는 비율별 템플릿 값으로 고정
     font_size=t['font_size']
     title_left=t['title_left']
@@ -165,7 +181,8 @@ with preview_col:
             source.seek(0)
             rendered=make_thumbnail(source,headline,ratio,gradient_bottom,False,
                 font_size,title_bottom,title_left,line_gap,logo_width,logo_bottom,gradient_strength,
-                logo_top,logo_left,gradient_top=gradient_top,gradient_bottom=gradient_bottom)
+                logo_top,logo_left,gradient_top=gradient_top,gradient_bottom=gradient_bottom,
+                title_shadow_strength=title_shadow_strength)
             st.markdown(f'<div class="fp-card"><img class="fp-small-image" src="{image_data_uri(rendered)}"></div>',unsafe_allow_html=True)
             st.download_button('⬇ 썸네일 PNG 다운로드',data=rendered,file_name=f'fastpaper_{w}x{h}.png',mime='image/png',use_container_width=True)
         except Exception as e:
