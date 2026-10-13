@@ -5,8 +5,9 @@ from pathlib import Path
 
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Fastpapermag Preview System", layout="wide")
+st.set_page_config(page_title="FASTPAPER Studio", layout="wide", initial_sidebar_state="collapsed")
 BASE = Path(__file__).resolve().parent
 FONT_PATH = BASE / 'assets' / 'fastpaperSans-Bold.ttf'
 LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
@@ -115,115 +116,225 @@ def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=Fal
     return buf.getvalue()
 
 
-# 원래 앱의 입력 및 미리보기 구조 유지
-with st.sidebar:
-    st.title('📂 Editor')
-    thumb_files = st.file_uploader('썸네일 이미지 (최대 3개)', type=['png','jpg','jpeg'], accept_multiple_files=True)
-    thumb_texts = [st.text_area(f'{i+1}안 썸네일 문구', key=f't_txt_{i}', height=100) for i in range(3)]
-    content_files = st.file_uploader('본문 소재', type=['png','jpg','jpeg','mp4','mov'], accept_multiple_files=True)
-    mention_text = st.text_area('본문 멘션', height=400)
-    hashtag_text = st.text_area('댓글 해시태그', height=100)
 
-st.header('🖼️ FASTPAPER 썸네일 제작')
-st.caption('4:5 · 9:16 · 1:1 / fastpaperSans Bold / PNG 출력')
-with st.expander('썸네일 자동 제작', expanded=True):
-    ratio = st.radio('썸네일 비율', ['4:5', '9:16', '1:1'], horizontal=True, key='maker_ratio')
-    settings = TEMPLATES[ratio]
-    width, height = settings['size']
-    st.caption(f'출력: {width} × {height}px')
-    left, right = st.columns([1, 1])
-    with left:
-        source = st.file_uploader('배경 이미지', type=['png','jpg','jpeg','webp'], key='maker_source')
-        headline = st.text_area('썸네일 제목 (줄바꿈 직접 입력)', height=135, key='maker_headline', placeholder='얼굴합 난리났다는\n고윤정 X 디디에 두보\n화보 공개')
-        c1, c2 = st.columns(2)
-        with c1:
-            gradient_bottom = st.checkbox('하단 검은 그라데이션', value=True)
-        with c2:
-            logo_shadow = st.checkbox('로고 그림자', value=False)
-        gradient_top = st.checkbox('상단 검은 그라데이션', value=False)
-        with st.expander('위치 / 크기 미세 조정'):
-            font_size = st.slider('제목 글자 크기', 32, 120, settings['font_size'], key=f'font_{ratio}')
-            if settings['title_align'] == 'left':
-                title_left = st.slider('제목 왼쪽 위치 (px)', 0, 350, settings['title_left'], key=f'left_{ratio}')
-            else:
-                title_left = 0
-                st.caption('1:1 제목은 가로 중앙 정렬입니다.')
-            title_bottom = st.slider('제목 마지막 줄 하단 기준 (px)', 300, height - 50, settings['title_bottom'], key=f'bottom_{ratio}')
-            line_gap = st.slider('줄 간격 추가 (px)', -12, 36, settings['line_gap'], key=f'gap_{ratio}')
-            logo_width = st.slider('로고 너비 (px)', 100, 350, settings['logo_width'], key=f'logo_width_{ratio}')
-            if settings['logo_position'] == 'top':
-                logo_top = st.slider('로고 위쪽 위치 (px)', 0, 550, settings['logo_top'], key=f'logo_top_{ratio}')
-                logo_left = st.slider('로고 왼쪽 위치 (px)', 0, 350, settings['logo_left'], key=f'logo_left_{ratio}')
-                logo_bottom = 0
-            else:
-                logo_bottom = st.slider('로고 하단 여백 (px)', 0, 140, settings['logo_bottom'], key=f'logo_bottom_{ratio}')
-                logo_top = 0
-                logo_left = 0
-            gradient_strength = st.slider('그라데이션 강도', 0, 230, 150)
-    with right:
-        if source:
+# ---------------------------------------------------------
+# 단일 화면 · 4개 작업 섹션
+# ---------------------------------------------------------
+st.markdown("""<style>
+[data-testid="stSidebar"], [data-testid="collapsedControl"] {display:none !important;}
+.block-container {max-width:1160px;padding-top:2rem;padding-bottom:4rem;}
+.fp-head {font-size:1.9rem;font-weight:800;letter-spacing:-.05em;margin-bottom:0;}
+.fp-sub {color:#777;font-size:.89rem;margin-bottom:1.3rem;}
+.fp-card {background:#f7f7f7;border:1px solid #ececec;border-radius:12px;padding:12px;}
+.fp-small-image {width:100%;max-width:245px;max-height:330px;object-fit:contain;display:block;margin:auto;border-radius:8px;}
+.fp-candidate {width:100%;max-width:160px;max-height:205px;object-fit:contain;border-radius:7px;display:block;margin:0 auto;}
+.fp-feed {display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin:12px 0;}
+.fp-feed-img {width:135px;height:169px;object-fit:cover;border-radius:7px;border:1px solid #eee;}
+.fp-feed-video {width:135px;height:169px;background:#202020;color:white;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:10px;text-align:center;font-size:12px;overflow-wrap:anywhere;}
+section[data-testid="stFileUploader"] {margin-bottom:.25rem;}
+</style>""",unsafe_allow_html=True)
+
+st.markdown('<div class="fp-head">FASTPAPER STUDIO</div><div class="fp-sub">썸네일 제작부터 인스타그램 게시물 확인까지 한 화면에서 작업</div>',unsafe_allow_html=True)
+
+# 1. 썸네일 제작
+st.subheader('01  ·  썸네일 제작')
+ratio = st.segmented_control('비율 선택', ['4:5','9:16','1:1'], default='4:5', key='maker_ratio')
+ratio = ratio or '4:5'
+t = TEMPLATES[ratio]
+w,h=t['size']
+edit_col,preview_col = st.columns([1.3,1],gap='large')
+with edit_col:
+    source=st.file_uploader('배경 이미지',type=['png','jpg','jpeg','webp'],key='maker_source')
+    headline=st.text_area('썸네일 제목 · 줄바꿈 직접 입력',height=115,key='maker_headline',placeholder='첫째 줄\n둘째 줄\n셋째 줄')
+    g1,g2=st.columns(2)
+    with g1: gradient_top=st.checkbox('상단 그라데이션',value=False)
+    with g2: gradient_bottom=st.checkbox('하단 그라데이션',value=True)
+    # 디자인 좌표/폰트/로고 크기는 비율별 템플릿 값으로 고정
+    font_size=t['font_size']
+    title_left=t['title_left']
+    title_bottom=t['title_bottom']
+    line_gap=t['line_gap']
+    logo_width=t['logo_width']
+    logo_top=t['logo_top']
+    logo_left=t['logo_left']
+    logo_bottom=t['logo_bottom']
+
+rendered=None
+with preview_col:
+    st.caption(f'미리보기 · {w} × {h}px')
+    if source:
+        try:
+            source.seek(0)
+            rendered=make_thumbnail(source,headline,ratio,gradient_bottom,False,
+                font_size,title_bottom,title_left,line_gap,logo_width,logo_bottom,150,
+                logo_top,logo_left,gradient_top=gradient_top,gradient_bottom=gradient_bottom)
+            st.markdown(f'<div class="fp-card"><img class="fp-small-image" src="{image_data_uri(rendered)}"></div>',unsafe_allow_html=True)
+            st.download_button('⬇ 썸네일 PNG 다운로드',data=rendered,file_name=f'fastpaper_{w}x{h}.png',mime='image/png',use_container_width=True)
+        except Exception as e:
+            st.error(f'이미지 생성 오류: {e}')
+    else:
+        st.info('배경 이미지를 올리면 이곳에 작은 미리보기가 표시됩니다.')
+
+with st.expander('기존 썸네일 시안도 비교하기 (선택)'):
+    thumb_files=st.file_uploader('비교할 시안 · 최대 3개',type=['png','jpg','jpeg'],accept_multiple_files=True,key='compare_files')
+    candidates=[]
+    if rendered is not None:
+        candidates.append({'name':'자동 제작','data':rendered})
+    for i,f in enumerate((thumb_files or [])[:3]):
+        candidates.append({'name':f'시안 {i+1}','data':f.getvalue()})
+    if candidates:
+        cols=st.columns(len(candidates))
+        for i,item in enumerate(candidates):
+            with cols[i]:
+                st.markdown(f'<img class="fp-candidate" src="{image_data_uri(item["data"])}">',unsafe_allow_html=True)
+                if st.button(f'{item["name"]} 선택',key=f'select_{i}',use_container_width=True):
+                    st.session_state.selected_thumb_idx=i
+        st.caption('선택한 썸네일은 아래 본문 소재 미리보기에 첫 번째 이미지로 표시됩니다.')
+    else:
+        st.caption('제작한 썸네일 또는 기존 시안을 올리면 비교할 수 있습니다.')
+
+st.divider()
+# 2. 본문 소재
+st.subheader('02  ·  본문 소재')
+content_files=st.file_uploader('이미지 및 영상 업로드 · 여러 개 가능',type=['png','jpg','jpeg','webp','mp4','mov'],accept_multiple_files=True,key='content_files')
+media=[]
+if candidates:
+    idx=min(st.session_state.selected_thumb_idx,len(candidates)-1)
+    media.append(('image',candidates[idx]['data']))
+for f in sorted(content_files or [],key=lambda x:x.name):
+    if f.name.lower().endswith(('.mp4','.mov')):
+        media.append(('video',f.name))
+    else:
+        media.append(('image',f.getvalue()))
+if media:
+    items=['<div class="fp-feed">']
+    for typ,data in media:
+        if typ=='image':
+            items.append(f'<img class="fp-feed-img" src="{image_data_uri(data)}">')
+        else:
+            items.append(f'<div class="fp-feed-video">🎬 {html.escape(data)}</div>')
+    items.append('</div>')
+    st.markdown(''.join(items),unsafe_allow_html=True)
+    st.caption(f'미리보기 · 총 {len(media)}개 소재 (영상은 파일명으로 표시)')
+else:
+    st.caption('본문 소재를 업로드하면 작은 카드로 한눈에 표시됩니다.')
+
+st.divider()
+# 3. 본문 멘션
+st.subheader('03  ·  본문 멘션')
+mention_text=st.text_area('게시물 본문',height=180,key='mention_text',label_visibility='collapsed',placeholder='게시물에 들어갈 멘션을 입력하세요.')
+
+st.divider()
+# 4. 댓글 해시태그
+st.subheader('04  ·  댓글 해시태그')
+hashtag_text=st.text_area('댓글 해시태그',height=110,key='hashtag_text',label_visibility='collapsed',placeholder='#fastpaper #패스트페이퍼')
+
+
+st.divider()
+st.subheader('05  ·  게시물 전체 이미지 저장')
+st.caption('썸네일 · 본문 소재 · 멘션 · 해시태그를 하나의 이미지로 정리해 저장하거나 클립보드에 복사합니다. 영상은 파일명 카드로 표시됩니다.')
+
+def make_page_snapshot(media, mention, hashtags):
+    from PIL import Image, ImageDraw, ImageFont
+    width = 1080
+    margin = 66
+    bg = (255,255,255)
+    ink = (25,25,25)
+    muted = (110,110,110)
+    title_font = ImageFont.truetype(str(FONT_PATH), 43)
+    body_font = ImageFont.truetype(str(FONT_PATH), 28)
+    small_font = ImageFont.truetype(str(FONT_PATH), 23)
+    header_font = ImageFont.truetype(str(FONT_PATH), 35)
+    # 페이지 크기 사전 산정. 사진은 4:5 카드 5열로 배치.
+    card_w = 178
+    card_h = 224
+    gap = 18
+    rows = max(1,(len(media)+4)//5)
+    text_lines = []
+    for text in [mention, hashtags]:
+        text_lines.append(wrap_lines(text, body_font, width-2*margin))
+    height = 165 + rows*(card_h+gap) + 90 + sum(max(1,len(lines))*43+105 for lines in text_lines)+110
+    page=Image.new('RGB',(width,height),bg)
+    d=ImageDraw.Draw(page)
+    d.text((margin,47),'FASTPAPER STUDIO',font=title_font,fill=ink)
+    d.line((margin,115,width-margin,115),fill=(225,225,225),width=2)
+    d.text((margin,137),'POST PREVIEW',font=small_font,fill=muted)
+    y=185
+    for i,(typ,data) in enumerate(media):
+        col=i%5
+        row=i//5
+        x=margin+col*(card_w+gap)
+        cy=y+row*(card_h+gap)
+        if typ=='image':
             try:
-                source.seek(0)
-                rendered = make_thumbnail(
-                    source, headline, ratio, gradient_bottom, logo_shadow,
-                    font_size, title_bottom, title_left, line_gap,
-                    logo_width, logo_bottom, gradient_strength,
-                    logo_top, logo_left, gradient_top=gradient_top,
-                    gradient_bottom=gradient_bottom
-                )
-                st.image(rendered, caption=f'{ratio} 썸네일 미리보기', use_container_width=True)
-                st.download_button('⬇️ 썸네일 PNG 다운로드', data=rendered,
-                                   file_name=f'fastpaper_thumbnail_{width}x{height}.png',
-                                   mime='image/png', use_container_width=True)
-                st.session_state.generated_thumb = rendered
-            except Exception as e:
-                st.error(f'썸네일 생성 실패: {e}')
+                image=Image.open(BytesIO(data)).convert('RGB')
+                image=ImageOps.fit(image,(card_w,card_h),method=Image.Resampling.LANCZOS)
+                page.paste(image,(x,cy))
+            except Exception:
+                d.rectangle((x,cy,x+card_w,cy+card_h),fill=(235,235,235))
         else:
-            st.session_state.pop('generated_thumb', None)
-            st.info('왼쪽에서 배경 이미지를 업로드하면 자동으로 미리보기가 생성됩니다.')
+            d.rounded_rectangle((x,cy,x+card_w,cy+card_h),radius=8,fill=(40,40,40))
+            d.text((x+14,cy+70),'VIDEO',font=small_font,fill='white')
+            name=str(data)
+            for j,line in enumerate(wrap_lines(name,small_font,card_w-25)[:3]):
+                d.text((x+10,cy+110+j*29),line,font=small_font,fill='white')
+    y+=rows*(card_h+gap)+38
+    for label,lines in [('본문 멘션',text_lines[0]),('댓글 해시태그',text_lines[1])]:
+        d.line((margin,y,width-margin,y),fill=(225,225,225),width=2)
+        y+=23
+        d.text((margin,y),label,font=header_font,fill=ink)
+        y+=57
+        for line in lines or ['']:
+            d.text((margin,y),line,font=body_font,fill=ink)
+            y+=43
+        y+=45
+    return page.crop((0,0,min(width,page.width),min(height,y+35)))
 
-# 선택할 썸네일 후보: 업로드된 이미지 + 제작한 이미지
-candidates = []
-if thumb_files:
-    for i, f in enumerate(thumb_files[:3]):
-        candidates.append({'name': f'{i+1}안', 'data': f.getvalue(), 'text': thumb_texts[i]})
-if source and 'generated_thumb' in st.session_state:
-    candidates.append({'name': '자동 제작', 'data': st.session_state.generated_thumb, 'text': headline})
+def wrap_lines(text,font,max_width):
+    lines=[]
+    for paragraph in (text or '').splitlines():
+        if not paragraph:
+            lines.append('')
+            continue
+        current=''
+        for char in paragraph:
+            attempt=current+char
+            if font.getlength(attempt)>max_width and current:
+                lines.append(current)
+                current=char
+            else:
+                current=attempt
+        lines.append(current)
+    return lines
 
-if candidates:
-    st.subheader('🎯 썸네일 안 선택')
-    cols = st.columns(len(candidates))
-    for i, item in enumerate(candidates):
-        with cols[i]:
-            uri = image_data_uri(item['data'])
-            st.markdown(f'<div class="thumb-img-box"><img src="{uri}"></div><div class="thumb-text-left">{html.escape(clean_insta_text(item["text"]))}</div>', unsafe_allow_html=True)
-            if st.button(f'{item["name"]} 선택', key=f'btn_{i}', use_container_width=True):
-                st.session_state.selected_thumb_idx = i
-                st.rerun()
-    st.divider()
+snapshot=make_page_snapshot(media,clean_insta_text(mention_text),clean_insta_text(hashtag_text))
+out=BytesIO()
+snapshot.save(out,format='PNG')
+snapshot_bytes=out.getvalue()
+st.download_button('📸 전체 이미지 저장 (PNG)',data=snapshot_bytes,file_name='fastpaper_post_preview.png',mime='image/png',use_container_width=True)
 
-st.markdown('<div class="insta-header"><div class="profile-circle"></div><span>fastpapermag</span></div>', unsafe_allow_html=True)
-combined_media = []
-if candidates:
-    idx = min(st.session_state.selected_thumb_idx, len(candidates) - 1)
-    combined_media.append(('image', candidates[idx]['data']))
-if content_files:
-    for f in sorted(content_files, key=lambda x: x.name):
-        if f.name.lower().endswith(('.mp4', '.mov')):
-            # 영상은 그리드에 플레이스홀더로 표시 (원본처럼 img로 렌더링되지 않는 문제 방지)
-            combined_media.append(('video', f.name))
-        else:
-            combined_media.append(('image', f.getvalue()))
-
-if combined_media:
-    grid_html = '<div class="content-grid">'
-    for typ, val in combined_media:
-        if typ == 'image':
-            grid_html += f'<div class="grid-item"><img src="{image_data_uri(val)}"></div>'
-        else:
-            grid_html += f'<div class="grid-item" style="color:#fff;font-size:13px;text-align:center;padding:8px">🎬 {html.escape(val)}</div>'
-    st.markdown(grid_html + '</div>', unsafe_allow_html=True)
-
-st.markdown(f'<div class="insta-text-container"><div class="insta-text-box">{html.escape(clean_insta_text(mention_text))}</div></div>', unsafe_allow_html=True)
-if hashtag_text:
-    st.markdown(f'<div class="hashtag-box"><p style="color:#333;font-size:14px;margin:0 0 10px;font-weight:bold">댓글태그</p><div style="color:#00376b;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere">{html.escape(clean_insta_text(hashtag_text))}</div></div>', unsafe_allow_html=True)
+# 클립보드는 브라우저의 사용자 클릭 이벤트 안에서 직접 처리
+snapshot_b64=base64.b64encode(snapshot_bytes).decode('ascii')
+components.html(f"""
+<div style="font-family:sans-serif;">
+<button id="copy" style="width:100%;border:1px solid #ddd;background:#121212;color:white;border-radius:8px;padding:13px;cursor:pointer;font-weight:700;">📋 전체 이미지 클립보드 복사</button>
+<div id="status" style="font-size:12px;color:#666;margin-top:5px;"></div>
+</div>
+<script>
+const button=document.getElementById('copy');
+const status=document.getElementById('status');
+button.addEventListener('click',async()=>{{
+  try {{
+    if(!navigator.clipboard || !window.ClipboardItem) throw new Error('브라우저가 이미지 클립보드를 지원하지 않습니다. HTTPS 환경의 Chrome/Edge에서 이용해 주세요.');
+    const raw=atob('{snapshot_b64}');
+    const bytes=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
+    const blob=new Blob([bytes],{{type:'image/png'}});
+    await navigator.clipboard.write([new ClipboardItem({{'image/png':blob}})]);
+    status.textContent='복사 완료! 원하는 곳에 Ctrl+V로 붙여넣으세요.';
+  }} catch(e) {{
+    status.textContent='복사 실패: '+e.message+' · 위 PNG 저장 버튼을 이용해 주세요.';
+  }}
+}});
+</script>
+""",height=95)
