@@ -11,11 +11,20 @@ st.set_page_config(page_title="FASTPAPER Studio", layout="wide", initial_sidebar
 BASE = Path(__file__).resolve().parent
 FONT_PATH = BASE / 'assets' / 'fastpaperSans-Bold.ttf'
 LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
+# PSD 원본의 텍스트/로고 레이어 바운딩 박스 기준 (px).
+# 제목 font_size/line_step은 실제 레이어 글자폭/높이와 제공 폰트 렌더링을 대조해 보정한 값.
 TEMPLATES = {
-    '4:5': {'size': (1080, 1350), 'font_size': 72, 'title_left': 95, 'title_bottom': 1130, 'line_gap': 8, 'logo_width': 205, 'logo_bottom': 40, 'logo_top': 0, 'logo_left': 0, 'title_align': 'left', 'logo_position': 'bottom'},
-    '9:16': {'size': (1080, 1920), 'font_size': 80, 'title_left': 69, 'title_bottom': 1474, 'line_gap': 15, 'logo_width': 216, 'logo_bottom': 0, 'logo_top': 290, 'logo_left': 85, 'title_align': 'left', 'logo_position': 'top'},
-    '1:1': {'size': (1080, 1080), 'font_size': 64, 'title_left': 0, 'title_bottom': 920, 'line_gap': 8, 'logo_width': 160, 'logo_bottom': 27, 'logo_top': 0, 'logo_left': 0, 'title_align': 'center', 'logo_position': 'bottom'},
+    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'title_top': 884,
+            'line_step': 89, 'title_align': 'left', 'logo_width': 203, 'logo_left': 439,
+            'logo_top': 1279, 'logo_position': 'fixed'},
+    '9:16': {'size': (1080, 1920), 'font_size': 79, 'title_left': 72, 'title_top': 1183,
+             'line_step': 96, 'title_align': 'left', 'logo_width': 216, 'logo_left': 85,
+             'logo_top': 290, 'logo_position': 'fixed'},
+    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'title_top': 707,
+            'line_step': 71, 'title_align': 'center', 'logo_width': 162, 'logo_left': 460,
+            'logo_top': 1023, 'logo_position': 'fixed'},
 }
+
 
 st.markdown('''<style>
 .main {background-color:#fff}
@@ -46,25 +55,12 @@ def crop_cover(im, size):
     return ImageOps.fit(im, size, method=Image.Resampling.LANCZOS, centering=(.5, .5))
 
 
-def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=False,
-                   font_size=None, title_bottom=None, title_left=None, line_gap=None,
-                   logo_width=None, logo_bottom=None, gradient_strength=150,
-                   logo_top=None, logo_left=None, gradient_top=False, gradient_bottom=None, title_shadow_strength=0):
+def make_thumbnail(source, headline, ratio='4:5', gradient_top=False,
+                   gradient_bottom=True, gradient_strength=150, title_shadow_strength=0):
     t = TEMPLATES[ratio]
     W, H = t['size']
-    font_size = t['font_size'] if font_size is None else font_size
-    title_bottom = t['title_bottom'] if title_bottom is None else title_bottom
-    title_left = t['title_left'] if title_left is None else title_left
-    line_gap = t['line_gap'] if line_gap is None else line_gap
-    logo_width = t['logo_width'] if logo_width is None else logo_width
-    logo_bottom = t['logo_bottom'] if logo_bottom is None else logo_bottom
-    logo_top = t['logo_top'] if logo_top is None else logo_top
-    logo_left = t['logo_left'] if logo_left is None else logo_left
-
     base = crop_cover(Image.open(source), (W, H)).convert('RGBA')
-    # 상단 / 하단 그라데이션을 독립적으로 설정
-    if gradient_bottom is None:
-        gradient_bottom = gradient
+
     if gradient_top or gradient_bottom:
         alpha = Image.new('L', (1, H), 0)
         for y in range(H):
@@ -80,48 +76,31 @@ def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=Fal
         overlay.putalpha(alpha.resize((W, H)))
         base = Image.alpha_composite(base, overlay)
 
-    font = ImageFont.truetype(str(FONT_PATH), font_size)
+    font = ImageFont.truetype(str(FONT_PATH), t['font_size'])
     lines = headline.strip().splitlines() if headline.strip() else []
     if lines:
-        d = ImageDraw.Draw(base)
-        line_h = font_size + line_gap
-        top = title_bottom - len(lines) * line_h
-        # 제목 그림자: 텍스트만 별도 레이어에 그린 뒤 블러 적용
-        if title_shadow_strength > 0:
-            shadow_layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-            shadow_draw = ImageDraw.Draw(shadow_layer)
+        # PSD의 제목 텍스트 박스는 하단 기준: 줄 수가 바뀌어도 마지막 줄 위치 고정.
+        # 원본 PSD는 3줄 제목을 사용함.
+        top = t['title_top'] + (3 - len(lines)) * t['line_step']
+        def draw_title(draw, dx=0, dy=0, color='white'):
             for i, line in enumerate(lines):
-                if TEMPLATES[ratio]['title_align'] == 'center':
-                    pos, anchor = (W // 2 + 2, top + i * line_h + 3), 'mt'
+                y = top + i * t['line_step'] + dy
+                if t['title_align'] == 'center':
+                    draw.text((W//2 + dx, y), line, font=font, fill=color, anchor='mt')
                 else:
-                    pos, anchor = (title_left + 2, top + i * line_h + 3), 'lt'
-                shadow_draw.text(pos, line, font=font,
-                                 fill=(0, 0, 0, title_shadow_strength), anchor=anchor)
-            shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(5))
-            base = Image.alpha_composite(base, shadow_layer)
-            d = ImageDraw.Draw(base)
-        for i, line in enumerate(lines):
-            if TEMPLATES[ratio]['title_align'] == 'center':
-                d.text((W // 2, top + i * line_h), line, font=font, fill='white', anchor='mt')
-            else:
-                d.text((title_left, top + i * line_h), line, font=font, fill='white', anchor='lt')
+                    draw.text((t['title_left'] + dx, y), line, font=font, fill=color, anchor='lt')
+        if title_shadow_strength > 0:
+            shadow = Image.new('RGBA', (W,H), (0,0,0,0))
+            draw_title(ImageDraw.Draw(shadow), dx=2, dy=3,
+                       color=(0,0,0,title_shadow_strength))
+            base = Image.alpha_composite(base, shadow.filter(ImageFilter.GaussianBlur(5)))
+        draw_title(ImageDraw.Draw(base))
 
     logo = Image.open(LOGO_PATH).convert('RGBA')
-    logo_height = round(logo.height * logo_width / logo.width)
-    logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
-    if TEMPLATES[ratio]['logo_position'] == 'top':
-        x, y = logo_left, logo_top
-    else:
-        x, y = (W - logo_width) // 2, H - logo_bottom - logo_height
-    if logo_shadow:
-        shadow = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-        alpha = logo.getchannel('A').point(lambda v: round(v * .7))
-        dark = Image.new('RGBA', logo.size, (0, 0, 0, 0))
-        dark.putalpha(alpha)
-        shadow.alpha_composite(dark, (x + 2, y + 3))
-        shadow = shadow.filter(ImageFilter.GaussianBlur(7))
-        base = Image.alpha_composite(base, shadow)
-    base.alpha_composite(logo, (x, y))
+    logo_w = t['logo_width']
+    logo_h = round(logo.height * logo_w / logo.width)
+    logo = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+    base.alpha_composite(logo, (t['logo_left'], t['logo_top']))
     buf = BytesIO()
     base.convert('RGB').save(buf, format='PNG', optimize=False)
     return buf.getvalue()
@@ -163,15 +142,6 @@ with edit_col:
     gradient_strength=st.slider('그라데이션 농도',min_value=0,max_value=255,value=150,step=5,help='상단과 하단에 동일하게 적용됩니다.')
     title_shadow_enabled=st.checkbox('제목 그림자',value=False)
     title_shadow_strength=st.slider('제목 그림자 농도',min_value=0,max_value=255,value=120,step=5,disabled=not title_shadow_enabled) if title_shadow_enabled else 0
-    # 디자인 좌표/폰트/로고 크기는 비율별 템플릿 값으로 고정
-    font_size=t['font_size']
-    title_left=t['title_left']
-    title_bottom=t['title_bottom']
-    line_gap=t['line_gap']
-    logo_width=t['logo_width']
-    logo_top=t['logo_top']
-    logo_left=t['logo_left']
-    logo_bottom=t['logo_bottom']
 
 rendered=None
 with preview_col:
@@ -179,10 +149,12 @@ with preview_col:
     if source:
         try:
             source.seek(0)
-            rendered=make_thumbnail(source,headline,ratio,gradient_bottom,False,
-                font_size,title_bottom,title_left,line_gap,logo_width,logo_bottom,gradient_strength,
-                logo_top,logo_left,gradient_top=gradient_top,gradient_bottom=gradient_bottom,
-                title_shadow_strength=title_shadow_strength)
+            rendered=make_thumbnail(
+                source, headline, ratio,
+                gradient_top=gradient_top, gradient_bottom=gradient_bottom,
+                gradient_strength=gradient_strength,
+                title_shadow_strength=title_shadow_strength
+            )
             st.markdown(f'<div class="fp-card"><img class="fp-small-image" src="{image_data_uri(rendered)}"></div>',unsafe_allow_html=True)
             st.download_button('⬇ 썸네일 PNG 다운로드',data=rendered,file_name=f'fastpaper_{w}x{h}.png',mime='image/png',use_container_width=True)
         except Exception as e:
