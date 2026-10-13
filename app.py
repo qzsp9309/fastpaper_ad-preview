@@ -13,7 +13,7 @@ FONT_PATH = BASE / 'assets' / 'fastpaperSans-Bold.ttf'
 LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
 TEMPLATES = {
     '4:5': {'size': (1080, 1350), 'font_size': 72, 'title_left': 95, 'title_bottom': 1130, 'line_gap': 8, 'logo_width': 205, 'logo_bottom': 40, 'logo_top': 0, 'logo_left': 0, 'title_align': 'left', 'logo_position': 'bottom'},
-    '9:16': {'size': (1080, 1920), 'font_size': 82, 'title_left': 66, 'title_bottom': 1450, 'line_gap': 8, 'logo_width': 220, 'logo_bottom': 0, 'logo_top': 285, 'logo_left': 74, 'title_align': 'left', 'logo_position': 'top'},
+    '9:16': {'size': (1080, 1920), 'font_size': 82, 'title_left': 69, 'title_bottom': 1474, 'line_gap': 15, 'logo_width': 216, 'logo_bottom': 0, 'logo_top': 290, 'logo_left': 85, 'title_align': 'left', 'logo_position': 'top'},
     '1:1': {'size': (1080, 1080), 'font_size': 64, 'title_left': 0, 'title_bottom': 920, 'line_gap': 8, 'logo_width': 160, 'logo_bottom': 27, 'logo_top': 0, 'logo_left': 0, 'title_align': 'center', 'logo_position': 'bottom'},
 }
 
@@ -31,9 +31,6 @@ st.markdown('''<style>
 .insta-text-box {font-family:sans-serif;font-size:16px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:0!important;padding-top:0!important}
 .hashtag-box {background:#fafafa;padding:20px;border-radius:8px;border:1px solid #f0f0f0;margin-top:20px}
 </style>''', unsafe_allow_html=True)
-
-if 'selected_thumb_idx' not in st.session_state:
-    st.session_state.selected_thumb_idx = 0
 
 
 def clean_insta_text(text):
@@ -149,6 +146,7 @@ with edit_col:
     g1,g2=st.columns(2)
     with g1: gradient_top=st.checkbox('상단 그라데이션',value=False)
     with g2: gradient_bottom=st.checkbox('하단 그라데이션',value=True)
+    gradient_strength=st.slider('그라데이션 농도',min_value=0,max_value=255,value=150,step=5,help='상단과 하단에 동일하게 적용됩니다.')
     # 디자인 좌표/폰트/로고 크기는 비율별 템플릿 값으로 고정
     font_size=t['font_size']
     title_left=t['title_left']
@@ -166,7 +164,7 @@ with preview_col:
         try:
             source.seek(0)
             rendered=make_thumbnail(source,headline,ratio,gradient_bottom,False,
-                font_size,title_bottom,title_left,line_gap,logo_width,logo_bottom,150,
+                font_size,title_bottom,title_left,line_gap,logo_width,logo_bottom,gradient_strength,
                 logo_top,logo_left,gradient_top=gradient_top,gradient_bottom=gradient_bottom)
             st.markdown(f'<div class="fp-card"><img class="fp-small-image" src="{image_data_uri(rendered)}"></div>',unsafe_allow_html=True)
             st.download_button('⬇ 썸네일 PNG 다운로드',data=rendered,file_name=f'fastpaper_{w}x{h}.png',mime='image/png',use_container_width=True)
@@ -175,32 +173,13 @@ with preview_col:
     else:
         st.info('배경 이미지를 올리면 이곳에 작은 미리보기가 표시됩니다.')
 
-with st.expander('기존 썸네일 시안도 비교하기 (선택)'):
-    thumb_files=st.file_uploader('비교할 시안 · 최대 3개',type=['png','jpg','jpeg'],accept_multiple_files=True,key='compare_files')
-    candidates=[]
-    if rendered is not None:
-        candidates.append({'name':'자동 제작','data':rendered})
-    for i,f in enumerate((thumb_files or [])[:3]):
-        candidates.append({'name':f'시안 {i+1}','data':f.getvalue()})
-    if candidates:
-        cols=st.columns(len(candidates))
-        for i,item in enumerate(candidates):
-            with cols[i]:
-                st.markdown(f'<img class="fp-candidate" src="{image_data_uri(item["data"])}">',unsafe_allow_html=True)
-                if st.button(f'{item["name"]} 선택',key=f'select_{i}',use_container_width=True):
-                    st.session_state.selected_thumb_idx=i
-        st.caption('선택한 썸네일은 아래 본문 소재 미리보기에 첫 번째 이미지로 표시됩니다.')
-    else:
-        st.caption('제작한 썸네일 또는 기존 시안을 올리면 비교할 수 있습니다.')
-
 st.divider()
 # 2. 본문 소재
 st.subheader('02  ·  본문 소재')
 content_files=st.file_uploader('이미지 및 영상 업로드 · 여러 개 가능',type=['png','jpg','jpeg','webp','mp4','mov'],accept_multiple_files=True,key='content_files')
 media=[]
-if candidates:
-    idx=min(st.session_state.selected_thumb_idx,len(candidates)-1)
-    media.append(('image',candidates[idx]['data']))
+if rendered is not None:
+    media.append(('image',rendered))
 for f in sorted(content_files or [],key=lambda x:x.name):
     if f.name.lower().endswith(('.mp4','.mov')):
         media.append(('video',f.name))
