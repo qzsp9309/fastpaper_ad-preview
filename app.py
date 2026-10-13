@@ -17,7 +17,7 @@ TEMPLATES = {
     '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'title_top': 884,
             'line_step': 89, 'title_align': 'left', 'logo_width': 203, 'logo_left': 439,
             'logo_top': 1279, 'logo_position': 'fixed'},
-    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72, 'title_top': 1183,
+    '9:16': {'size': (1080, 1920), 'font_size': 80, 'title_left': 72, 'title_top': 1183,
              'line_step': 96, 'title_align': 'left', 'logo_width': 216, 'logo_left': 85,
              'logo_top': 290, 'logo_position': 'fixed'},
     '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'title_top': 707,
