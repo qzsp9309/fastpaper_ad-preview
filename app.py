@@ -17,7 +17,7 @@ TEMPLATES = {
     '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'title_top': 884,
             'line_step': 89, 'title_align': 'left', 'logo_width': 203, 'logo_left': 439,
             'logo_top': 1279, 'logo_position': 'fixed'},
-    '9:16': {'size': (1080, 1920), 'font_size': 80, 'title_left': 72, 'title_top': 1183,
+    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72, 'title_top': 1183,
              'line_step': 96, 'title_align': 'left', 'logo_width': 216, 'logo_left': 85,
              'logo_top': 290, 'logo_position': 'fixed'},
     '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'title_top': 707,
@@ -126,41 +126,64 @@ section[data-testid="stFileUploader"] {margin-bottom:.25rem;}
 
 st.markdown('<div class="fp-head">FASTPAPER STUDIO</div><div class="fp-sub">썸네일 제작부터 인스타그램 게시물 확인까지 한 화면에서 작업</div>',unsafe_allow_html=True)
 
-# 1. 썸네일 제작
+# 1. 썸네일 3안 독립 제작 및 선택
 st.subheader('01  ·  썸네일 제작')
-ratio = st.segmented_control('비율 선택', ['4:5','9:16','1:1'], default='4:5', key='maker_ratio')
-ratio = ratio or '4:5'
-t = TEMPLATES[ratio]
-w,h=t['size']
-edit_col,preview_col = st.columns([1.3,1],gap='large')
-with edit_col:
-    source=st.file_uploader('배경 이미지',type=['png','jpg','jpeg','webp'],key='maker_source')
-    headline=st.text_area('썸네일 제목 · 줄바꿈 직접 입력',height=115,key='maker_headline',placeholder='첫째 줄\n둘째 줄\n셋째 줄')
-    g1,g2=st.columns(2)
-    with g1: gradient_top=st.checkbox('상단 그라데이션',value=False)
-    with g2: gradient_bottom=st.checkbox('하단 그라데이션',value=True)
-    gradient_strength=st.slider('그라데이션 농도',min_value=0,max_value=255,value=150,step=5,help='상단과 하단에 동일하게 적용됩니다.')
-    title_shadow_enabled=st.checkbox('제목 그림자',value=False)
-    title_shadow_strength=st.slider('제목 그림자 농도',min_value=0,max_value=255,value=120,step=5,disabled=not title_shadow_enabled) if title_shadow_enabled else 0
+st.caption('1안 · 2안 · 3안을 각각 제작하고, 게시물 미리보기에 사용할 시안을 선택하세요.')
 
-rendered=None
-with preview_col:
-    st.caption(f'미리보기 · {w} × {h}px')
-    if source:
-        try:
-            source.seek(0)
-            rendered=make_thumbnail(
-                source, headline, ratio,
-                gradient_top=gradient_top, gradient_bottom=gradient_bottom,
-                gradient_strength=gradient_strength,
-                title_shadow_strength=title_shadow_strength
-            )
-            st.markdown(f'<div class="fp-card"><img class="fp-small-image" src="{image_data_uri(rendered)}"></div>',unsafe_allow_html=True)
-            st.download_button('⬇ 썸네일 PNG 다운로드',data=rendered,file_name=f'fastpaper_{w}x{h}.png',mime='image/png',use_container_width=True)
-        except Exception as e:
-            st.error(f'이미지 생성 오류: {e}')
-    else:
-        st.info('배경 이미지를 올리면 이곳에 작은 미리보기가 표시됩니다.')
+if 'selected_thumb_idx' not in st.session_state:
+    st.session_state.selected_thumb_idx = 0
+
+thumbnail_results = [None, None, None]
+thumb_cols = st.columns(3, gap='medium')
+for idx, col in enumerate(thumb_cols):
+    with col:
+        st.markdown(f'**{idx + 1}안**')
+        ratio = st.selectbox('비율', ['4:5', '9:16', '1:1'], key=f'maker_ratio_{idx}')
+        source = st.file_uploader('배경 이미지', type=['png','jpg','jpeg','webp'], key=f'maker_source_{idx}')
+        headline = st.text_area('썸네일 제목', height=105, key=f'maker_headline_{idx}', placeholder='첫째 줄\n둘째 줄\n셋째 줄')
+        g1, g2 = st.columns(2, gap='small')
+        with g1:
+            gradient_top = st.checkbox('상단', value=False, key=f'gradient_top_{idx}')
+        with g2:
+            gradient_bottom = st.checkbox('하단', value=True, key=f'gradient_bottom_{idx}')
+        gradient_strength = st.slider('그라데이션 농도', 0, 255, 150, step=5, key=f'gradient_strength_{idx}')
+        title_shadow_enabled = st.checkbox('제목 그림자', value=False, key=f'title_shadow_enabled_{idx}')
+        title_shadow_strength = st.slider('그림자 농도', 0, 255, 120, step=5, key=f'title_shadow_strength_{idx}', disabled=not title_shadow_enabled)
+        if source:
+            try:
+                rendered_thumb = make_thumbnail(
+                    BytesIO(source.getvalue()), headline, ratio,
+                    gradient_top=gradient_top,
+                    gradient_bottom=gradient_bottom,
+                    gradient_strength=gradient_strength,
+                    title_shadow_strength=title_shadow_strength if title_shadow_enabled else 0,
+                )
+                thumbnail_results[idx] = rendered_thumb
+                st.markdown(f'<div class="fp-card"><img class="fp-small-image" src="{image_data_uri(rendered_thumb)}"></div>', unsafe_allow_html=True)
+                w, h = TEMPLATES[ratio]['size']
+                st.caption(f'{w} × {h}px')
+                st.download_button('⬇ PNG 다운로드', data=rendered_thumb, file_name=f'fastpaper_{idx+1}안_{w}x{h}.png', mime='image/png', key=f'thumb_download_{idx}', use_container_width=True)
+            except Exception as e:
+                st.error(f'이미지 생성 오류: {e}')
+        else:
+            st.caption('이미지를 올리면 미리보기가 표시됩니다.')
+
+available_indices = [i for i, item in enumerate(thumbnail_results) if item is not None]
+if available_indices:
+    current = st.session_state.selected_thumb_idx
+    if current not in available_indices:
+        st.session_state.selected_thumb_idx = available_indices[0]
+    selected = st.radio(
+        '게시물 미리보기에 사용할 썸네일',
+        options=available_indices,
+        format_func=lambda i: f'{i+1}안',
+        horizontal=True,
+        key='selected_thumb_idx',
+    )
+    rendered = thumbnail_results[selected]
+    st.caption(f'선택된 {selected+1}안이 아래 본문 소재 미리보기와 전체 이미지 저장에 반영됩니다.')
+else:
+    rendered = None
 
 st.divider()
 # 2. 본문 소재
