@@ -12,7 +12,7 @@ FONT_PATH = BASE / 'assets' / 'fastpaperSans-Bold.ttf'
 LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
 TEMPLATES = {
     '4:5': {'size': (1080, 1350), 'font_size': 72, 'title_left': 95, 'title_bottom': 1130, 'line_gap': 8, 'logo_width': 205, 'logo_bottom': 40, 'logo_top': 0, 'logo_left': 0, 'title_align': 'left', 'logo_position': 'bottom'},
-    '9:16': {'size': (1080, 1920), 'font_size': 72, 'title_left': 76, 'title_bottom': 1450, 'line_gap': 8, 'logo_width': 205, 'logo_bottom': 0, 'logo_top': 275, 'logo_left': 90, 'title_align': 'left', 'logo_position': 'top'},
+    '9:16': {'size': (1080, 1920), 'font_size': 82, 'title_left': 66, 'title_bottom': 1450, 'line_gap': 8, 'logo_width': 220, 'logo_bottom': 0, 'logo_top': 285, 'logo_left': 74, 'title_align': 'left', 'logo_position': 'top'},
     '1:1': {'size': (1080, 1080), 'font_size': 64, 'title_left': 0, 'title_bottom': 920, 'line_gap': 8, 'logo_width': 160, 'logo_bottom': 27, 'logo_top': 0, 'logo_left': 0, 'title_align': 'center', 'logo_position': 'bottom'},
 }
 
@@ -51,7 +51,7 @@ def crop_cover(im, size):
 def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=False,
                    font_size=None, title_bottom=None, title_left=None, line_gap=None,
                    logo_width=None, logo_bottom=None, gradient_strength=150,
-                   logo_top=None, logo_left=None):
+                   logo_top=None, logo_left=None, gradient_top=False, gradient_bottom=None):
     t = TEMPLATES[ratio]
     W, H = t['size']
     font_size = t['font_size'] if font_size is None else font_size
@@ -64,13 +64,21 @@ def make_thumbnail(source, headline, ratio='4:5', gradient=True, logo_shadow=Fal
     logo_left = t['logo_left'] if logo_left is None else logo_left
 
     base = crop_cover(Image.open(source), (W, H)).convert('RGBA')
-    if gradient:
-        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    # 상단 / 하단 그라데이션을 독립적으로 설정
+    if gradient_bottom is None:
+        gradient_bottom = gradient
+    if gradient_top or gradient_bottom:
         alpha = Image.new('L', (1, H), 0)
-        # 제목 및 하단 로고의 가독성을 위한 하단 그라데이션
         for y in range(H):
-            tval = max(0., min(1., (y - H * .49) / (H * .51)))
-            alpha.putpixel((0, y), round(gradient_strength * (tval ** 1.5)))
+            opacity = 0
+            if gradient_bottom:
+                progress = max(0., min(1., (y - H * .49) / (H * .51)))
+                opacity = max(opacity, round(gradient_strength * progress ** 1.5))
+            if gradient_top:
+                progress = max(0., min(1., (H * .42 - y) / (H * .42)))
+                opacity = max(opacity, round(gradient_strength * progress ** 1.5))
+            alpha.putpixel((0, y), opacity)
+        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         overlay.putalpha(alpha.resize((W, H)))
         base = Image.alpha_composite(base, overlay)
 
@@ -129,9 +137,10 @@ with st.expander('썸네일 자동 제작', expanded=True):
         headline = st.text_area('썸네일 제목 (줄바꿈 직접 입력)', height=135, key='maker_headline', placeholder='얼굴합 난리났다는\n고윤정 X 디디에 두보\n화보 공개')
         c1, c2 = st.columns(2)
         with c1:
-            gradient = st.checkbox('하단 검은 그라데이션', value=True)
+            gradient_bottom = st.checkbox('하단 검은 그라데이션', value=True)
         with c2:
             logo_shadow = st.checkbox('로고 그림자', value=False)
+        gradient_top = st.checkbox('상단 검은 그라데이션', value=False)
         with st.expander('위치 / 크기 미세 조정'):
             font_size = st.slider('제목 글자 크기', 32, 120, settings['font_size'], key=f'font_{ratio}')
             if settings['title_align'] == 'left':
@@ -156,10 +165,11 @@ with st.expander('썸네일 자동 제작', expanded=True):
             try:
                 source.seek(0)
                 rendered = make_thumbnail(
-                    source, headline, ratio, gradient, logo_shadow,
+                    source, headline, ratio, gradient_bottom, logo_shadow,
                     font_size, title_bottom, title_left, line_gap,
                     logo_width, logo_bottom, gradient_strength,
-                    logo_top, logo_left
+                    logo_top, logo_left, gradient_top=gradient_top,
+                    gradient_bottom=gradient_bottom
                 )
                 st.image(rendered, caption=f'{ratio} 썸네일 미리보기', use_container_width=True)
                 st.download_button('⬇️ 썸네일 PNG 다운로드', data=rendered,
