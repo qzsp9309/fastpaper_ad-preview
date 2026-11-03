@@ -19,13 +19,13 @@ LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
 # 제목 font_size/line_step은 실제 레이어 글자폭/높이와 제공 폰트 렌더링을 대조해 보정한 값.
 TEMPLATES = {
     # PSD 가이드: 마지막 줄의 실제 보이는 획 아래쪽을 고정, 이전 줄은 위로 쌓기.
-    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97,
+    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'ink_weight': 0.30,
             'last_bottom': 1135, 'line_step': 90, 'title_align': 'left',
             'logo_width': 203, 'logo_left': 439, 'logo_top': 1279},
-    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72,
+    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72, 'ink_weight': 0.30,
              'last_bottom': 1454, 'line_step': 98, 'title_align': 'left',
              'logo_width': 216, 'logo_left': 85, 'logo_top': 290},
-    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0,
+    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'ink_weight': 0.30,
             'last_bottom': 908, 'line_step': 72, 'title_align': 'center',
             'logo_width': 162, 'logo_left': 460, 'logo_top': 1023},
 }
@@ -99,6 +99,17 @@ def make_design_overlay(headline, ratio='4:5', gradient_top=False,
         if ink_box is None:
             continue
         mask = mask.crop(ink_box)
+        # 포토샵 대비 Pillow의 얇게 보이는 가장자리만 약하게 보정.
+        # 전체 글자를 1px 팽창시키지 않고, 확장 마스크를 낮은 비율로 혼합한다.
+        # 글자의 좌표/실제 아래 기준선은 이후 재계산하여 고정한다.
+        weight = t.get('ink_weight', 0.0)
+        if weight > 0:
+            padded = ImageOps.expand(mask, border=1, fill=0)
+            thickened = padded.filter(ImageFilter.MaxFilter(3))
+            mask = Image.blend(padded, thickened, weight)
+            actual = mask.getbbox()
+            if actual:
+                mask = mask.crop(actual)
         y_bottom = t['last_bottom'] - (len(lines) - 1 - index) * t['line_step']
         x = (W - mask.width) // 2 if t['title_align'] == 'center' else t['title_left']
         y = round(y_bottom - mask.height)
