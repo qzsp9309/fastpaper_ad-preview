@@ -15,17 +15,18 @@ st.set_page_config(page_title="FASTPAPER Studio", layout="wide", initial_sidebar
 BASE = Path(__file__).resolve().parent
 FONT_PATH = BASE / 'assets' / 'fastpaperSans-Bold.ttf'
 LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
-# PSD 원본의 텍스트/로고 레이어 바운딩 박스 기준 (px).
-# 제목 font_size/line_step은 실제 레이어 글자폭/높이와 제공 폰트 렌더링을 대조해 보정한 값.
+# PSD 텍스트 레이어를 직접 추출해 확인한 1080px 기준 실제 글자 하단 좌표:
+# 4:5 955/1045/1135, 9:16 1257/1355/1452, 1:1 764/836/908.
+# 출력은 각 비율의 기준 해상도로 통일하며, 마지막 줄의 실제 잉크 하단을 고정.
 TEMPLATES = {
     # PSD 가이드: 마지막 줄의 실제 보이는 획 아래쪽을 고정, 이전 줄은 위로 쌓기.
-    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'ink_weight': 0.30,
+    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'ink_weight': 0.30, 'width_scale': 1.012,
             'last_bottom': 1135, 'line_step': 90, 'title_align': 'left',
             'logo_width': 203, 'logo_left': 439, 'logo_top': 1279},
-    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72, 'ink_weight': 0.30,
-             'last_bottom': 1454, 'line_step': 98, 'title_align': 'left',
+    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72, 'ink_weight': 0.30, 'width_scale': 1.0,
+             'last_bottom': 1452, 'line_step': 98, 'title_align': 'left',
              'logo_width': 216, 'logo_left': 85, 'logo_top': 290},
-    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'ink_weight': 0.30,
+    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'ink_weight': 0.30, 'width_scale': 1.0,
             'last_bottom': 908, 'line_step': 72, 'title_align': 'center',
             'logo_width': 162, 'logo_left': 460, 'logo_top': 1023},
 }
@@ -110,6 +111,11 @@ def make_design_overlay(headline, ratio='4:5', gradient_top=False,
             actual = mask.getbbox()
             if actual:
                 mask = mask.crop(actual)
+        # 가로폭만 별도 보정: 세로 크기와 PSD 기준 하단 좌표는 절대 변경하지 않음.
+        width_scale = t.get('width_scale', 1.0)
+        if width_scale != 1.0:
+            new_width = max(1, round(mask.width * width_scale))
+            mask = mask.resize((new_width, mask.height), Image.Resampling.LANCZOS)
         y_bottom = t['last_bottom'] - (len(lines) - 1 - index) * t['line_step']
         x = (W - mask.width) // 2 if t['title_align'] == 'center' else t['title_left']
         y = round(y_bottom - mask.height)
