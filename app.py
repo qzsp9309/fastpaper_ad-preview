@@ -1,5 +1,9 @@
 import base64
 import html
+import subprocess
+import tempfile
+import shutil
+import os
 from io import BytesIO
 from pathlib import Path
 
@@ -14,16 +18,18 @@ LOGO_PATH = BASE / 'assets' / 'fp_logo_white_w1920.png'
 # PSD 원본의 텍스트/로고 레이어 바운딩 박스 기준 (px).
 # 제목 font_size/line_step은 실제 레이어 글자폭/높이와 제공 폰트 렌더링을 대조해 보정한 값.
 TEMPLATES = {
-    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97, 'title_top': 884,
-            'line_step': 89, 'title_align': 'left', 'logo_width': 203, 'logo_left': 439,
-            'logo_top': 1279, 'logo_position': 'fixed'},
-    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72, 'title_top': 1183,
-             'line_step': 96, 'title_align': 'left', 'logo_width': 216, 'logo_left': 85,
-             'logo_top': 290, 'logo_position': 'fixed'},
-    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0, 'title_top': 707,
-            'line_step': 71, 'title_align': 'center', 'logo_width': 162, 'logo_left': 460,
-            'logo_top': 1023, 'logo_position': 'fixed'},
+    # PSD 가이드: 마지막 줄의 실제 보이는 획 아래쪽을 고정, 이전 줄은 위로 쌓기.
+    '4:5': {'size': (1080, 1350), 'font_size': 75, 'title_left': 97,
+            'last_bottom': 1135, 'line_step': 90, 'title_align': 'left',
+            'logo_width': 203, 'logo_left': 439, 'logo_top': 1279},
+    '9:16': {'size': (1080, 1920), 'font_size': 77, 'title_left': 72,
+             'last_bottom': 1454, 'line_step': 98, 'title_align': 'left',
+             'logo_width': 216, 'logo_left': 85, 'logo_top': 290},
+    '1:1': {'size': (1080, 1080), 'font_size': 60, 'title_left': 0,
+            'last_bottom': 908, 'line_step': 72, 'title_align': 'center',
+            'logo_width': 162, 'logo_left': 460, 'logo_top': 1023},
 }
+
 
 
 st.markdown('''<style>
@@ -55,12 +61,13 @@ def crop_cover(im, size):
     return ImageOps.fit(im, size, method=Image.Resampling.LANCZOS, centering=(.5, .5))
 
 
-def make_thumbnail(source, headline, ratio='4:5', gradient_top=False,
-                   gradient_bottom=True, gradient_strength=150, title_shadow_strength=0):
+def make_design_overlay(headline, ratio='4:5', gradient_top=False,
+                        gradient_bottom=True, gradient_strength=150,
+                        title_shadow_strength=0):
+    """배경 없는 RGBA: 영상과 이미지에 동일한 디자인을 합성."""
     t = TEMPLATES[ratio]
     W, H = t['size']
-    base = crop_cover(Image.open(source), (W, H)).convert('RGBA')
-
+    layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     if gradient_top or gradient_bottom:
         alpha = Image.new('L', (1, H), 0)
         for y in range(H):
@@ -72,38 +79,97 @@ def make_thumbnail(source, headline, ratio='4:5', gradient_top=False,
                 progress = max(0., min(1., (H * .42 - y) / (H * .42)))
                 opacity = max(opacity, round(gradient_strength * progress ** 1.5))
             alpha.putpixel((0, y), opacity)
-        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-        overlay.putalpha(alpha.resize((W, H)))
-        base = Image.alpha_composite(base, overlay)
+        gradient = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        gradient.putalpha(alpha.resize((W, H)))
+        layer = Image.alpha_composite(layer, gradient)
 
     font = ImageFont.truetype(str(FONT_PATH), t['font_size'])
     lines = headline.strip().splitlines() if headline.strip() else []
-    if lines:
-        # PSD의 제목 텍스트 박스는 하단 기준: 줄 수가 바뀌어도 마지막 줄 위치 고정.
-        # 원본 PSD는 3줄 제목을 사용함.
-        top = t['title_top'] + (3 - len(lines)) * t['line_step']
-        def draw_title(draw, dx=0, dy=0, color='white'):
-            for i, line in enumerate(lines):
-                y = top + i * t['line_step'] + dy
-                if t['title_align'] == 'center':
-                    draw.text((W//2 + dx, y), line, font=font, fill=color, anchor='mt')
-                else:
-                    draw.text((t['title_left'] + dx, y), line, font=font, fill=color, anchor='lt')
+    # 마지막 줄의 실제 잉크 아래쪽을 PSD 가이드에 고정한다.
+    # 각 줄의 글자 모양에 따른 bbox 차이도 개별 보정한다.
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        bbox = font.getbbox(line, anchor='lt')
+        ink_w = max(1, bbox[2] - bbox[0])
+        ink_h = max(1, bbox[3] - bbox[1])
+        mask = Image.new('L', (ink_w + 8, ink_h + 8), 0)
+        ImageDraw.Draw(mask).text((4 - bbox[0], 4 - bbox[1]), line, font=font, fill=255, anchor='lt')
+        ink_box = mask.getbbox()
+        if ink_box is None:
+            continue
+        mask = mask.crop(ink_box)
+        y_bottom = t['last_bottom'] - (len(lines) - 1 - index) * t['line_step']
+        x = (W - mask.width) // 2 if t['title_align'] == 'center' else t['title_left']
+        y = round(y_bottom - mask.height)
         if title_shadow_strength > 0:
-            shadow = Image.new('RGBA', (W,H), (0,0,0,0))
-            draw_title(ImageDraw.Draw(shadow), dx=2, dy=3,
-                       color=(0,0,0,title_shadow_strength))
-            base = Image.alpha_composite(base, shadow.filter(ImageFilter.GaussianBlur(5)))
-        draw_title(ImageDraw.Draw(base))
+            shadow = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+            shadow_ink = Image.new('RGBA', mask.size, (0, 0, 0, title_shadow_strength))
+            shadow_ink.putalpha(mask.point(lambda a: round(a * title_shadow_strength / 255)))
+            shadow.alpha_composite(shadow_ink, (x + 2, y + 3))
+            layer = Image.alpha_composite(layer, shadow.filter(ImageFilter.GaussianBlur(5)))
+        white = Image.new('RGBA', mask.size, 'white')
+        white.putalpha(mask)
+        layer.alpha_composite(white, (x, y))
 
     logo = Image.open(LOGO_PATH).convert('RGBA')
     logo_w = t['logo_width']
     logo_h = round(logo.height * logo_w / logo.width)
     logo = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
-    base.alpha_composite(logo, (t['logo_left'], t['logo_top']))
+    layer.alpha_composite(logo, (t['logo_left'], t['logo_top']))
+    return layer
+
+
+def make_thumbnail(source, headline, ratio='4:5', gradient_top=False,
+                   gradient_bottom=True, gradient_strength=150, title_shadow_strength=0):
+    size = TEMPLATES[ratio]['size']
+    base = crop_cover(Image.open(source), size).convert('RGBA')
+    overlay = make_design_overlay(headline, ratio, gradient_top, gradient_bottom,
+                                  gradient_strength, title_shadow_strength)
+    result = Image.alpha_composite(base, overlay)
     buf = BytesIO()
-    base.convert('RGB').save(buf, format='PNG', optimize=False)
+    result.convert('RGB').save(buf, format='PNG', optimize=False)
     return buf.getvalue()
+
+
+def get_video_frame(video_bytes, extension):
+    """FFmpeg로 실제 영상의 첫 프레임을 추출."""
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / ('source' + extension)
+        dst = Path(tmp) / 'frame.png'
+        src.write_bytes(video_bytes)
+        cmd = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(src),
+               '-frames:v', '1', str(dst)]
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        if run.returncode != 0 or not dst.exists():
+            raise RuntimeError(run.stderr[-1500:] or '첫 프레임 추출 실패')
+        return dst.read_bytes()
+
+
+def render_video(video_bytes, extension, overlay_png, ratio):
+    """영상은 원본 FPS 유지, H.264 고화질 CRF 15, 오디오는 재인코딩 없이 복사."""
+    if shutil.which('ffmpeg') is None:
+        raise RuntimeError('FFmpeg가 설치되어 있지 않습니다.')
+    W, H = TEMPLATES[ratio]['size']
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / ('source' + extension)
+        png = Path(tmp) / 'overlay.png'
+        dst = Path(tmp) / 'result.mp4'
+        src.write_bytes(video_bytes)
+        png.write_bytes(overlay_png)
+        # 이미지와 동일한 중앙 cover crop. 화면 비율이 같으면 불필요한 crop 최소화.
+        vf = (f'[0:v]scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,'
+              f'crop={W}:{H},setsar=1,format=yuv420p[bg];'
+              f'[1:v]format=rgba[fg];[bg][fg]overlay=0:0:shortest=1:format=auto,format=yuv420p[v]')
+        cmd = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(src),
+               '-loop', '1', '-i', str(png), '-filter_complex', vf,
+               '-map', '[v]', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'slow',
+               '-crf', '15', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+               '-c:a', 'copy', '-shortest', str(dst)]
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+        if run.returncode != 0 or not dst.exists():
+            raise RuntimeError(run.stderr[-2500:] or '영상 합성 실패')
+        return dst.read_bytes()
 
 
 
@@ -185,6 +251,57 @@ if available_indices:
 else:
     rendered = None
 
+st.divider()
+st.subheader('01-1  ·  영상 위 썸네일 합성')
+st.caption('제작한 시안의 제목·그라데이션·로고를 투명 레이어로 영상 전체에 합성합니다. 원본 오디오는 유지합니다.')
+video_source = st.file_uploader('원본 영상 (MP4 / MOV)', type=['mp4', 'mov'], key='overlay_video')
+if video_source is not None:
+    if not available_indices:
+        st.info('위에서 먼저 썸네일 시안을 하나 제작해 주세요. 배경 이미지와 제목을 입력하면 됩니다.')
+    else:
+        video_idx = st.selectbox('영상에 적용할 시안', available_indices,
+                                 format_func=lambda i: f'{i+1}안', key='video_design_idx')
+        vr = st.session_state.get(f'maker_ratio_{video_idx}', '4:5')
+        vh = st.session_state.get(f'maker_headline_{video_idx}', '')
+        vt = st.session_state.get(f'gradient_top_{video_idx}', False)
+        vb = st.session_state.get(f'gradient_bottom_{video_idx}', True)
+        vs = st.session_state.get(f'gradient_strength_{video_idx}', 150)
+        ve = st.session_state.get(f'title_shadow_enabled_{video_idx}', False)
+        vss = st.session_state.get(f'title_shadow_strength_{video_idx}', 120) if ve else 0
+        design = make_design_overlay(vh, vr, vt, vb, vs, vss)
+        overlay_buf = BytesIO()
+        design.save(overlay_buf, format='PNG')
+        overlay_bytes = overlay_buf.getvalue()
+        st.caption(f'적용 비율: {vr} · {TEMPLATES[vr]["size"][0]}×{TEMPLATES[vr]["size"][1]} · 중앙 기준 화면 맞춤')
+        if shutil.which('ffmpeg') is None:
+            st.error('FFmpeg가 필요합니다. 배포 서버에 FFmpeg를 설치해 주세요.')
+        else:
+            try:
+                # 영상 전체를 재처리하지 않고 첫 프레임만 미리보기로 추출.
+                frame = get_video_frame(video_source.getvalue(), Path(video_source.name).suffix.lower())
+                preview = Image.alpha_composite(
+                    crop_cover(Image.open(BytesIO(frame)), TEMPLATES[vr]['size']).convert('RGBA'), design)
+                st.image(preview, caption='첫 프레임 합성 미리보기', width=320)
+            except Exception as e:
+                st.warning(f'미리보기 생성 실패: {e}')
+            st.download_button('투명 디자인 레이어 PNG 다운로드', data=overlay_bytes,
+                               file_name=f'fastpaper_overlay_{vr.replace(":", "x")}.png',
+                               mime='image/png', key='overlay_png_download')
+            if st.button('🎬 고화질 영상 렌더링 시작', type='primary', key='render_video_button'):
+                with st.spinner('원본 영상의 화질과 FPS를 최대한 유지하며 렌더링 중입니다...'):
+                    try:
+                        output = render_video(video_source.getvalue(),
+                                              Path(video_source.name).suffix.lower(), overlay_bytes, vr)
+                        st.session_state['rendered_video'] = output
+                        st.session_state['rendered_video_name'] = f'fastpaper_{vr.replace(":", "x")}_overlay.mp4'
+                    except Exception as e:
+                        st.error(f'영상 렌더링 실패: {e}')
+            if 'rendered_video' in st.session_state:
+                st.video(st.session_state['rendered_video'])
+                st.download_button('⬇ 합성 영상 MP4 다운로드',
+                                   data=st.session_state['rendered_video'],
+                                   file_name=st.session_state['rendered_video_name'],
+                                   mime='video/mp4', key='video_overlay_download')
 st.divider()
 # 2. 본문 소재
 st.subheader('02  ·  본문 소재')
